@@ -5,6 +5,7 @@ import { useResource } from "../hooks.js";
 import { formatDuration, formatMarks, formatWindow, two, STATE } from "../domain/format.js";
 import { Dialog } from "../components/instruments.jsx";
 import { ExamForm, blankDetails } from "../components/ExamForm.jsx";
+import { LedgerArt } from "../components/illustrations.jsx";
 import { EmptyState, Loading, LoadError, ModeLabel, StateBadge, Stat } from "../components/primitives.jsx";
 
 const FILTERS = ["all", "draft", "scheduled", "ongoing", "completed"];
@@ -40,7 +41,7 @@ export default function ExamRegister({ api, navigate }) {
           {f === "all" ? "All" : STATE[f].label}<span className="au-chip__count">{counts[f]}</span></button>)}
       </div>
 
-      {counts.all === 0 && <EmptyState title="No exams on record yet"
+      {counts.all === 0 && <EmptyState art={<LedgerArt />} title="No exams on record yet"
         action={<button className="primary" onClick={() => setCreating(true)}>Start a draft</button>}>
         A draft holds the title, window, duration and declared total. Add questions from your bank, then publish.
       </EmptyState>}

@@ -7,6 +7,7 @@ import { Dialog } from "../components/instruments.jsx";
 import { ImportPanel } from "../components/ImportPanel.jsx";
 import { QuestionForm, blankQuestion } from "../components/QuestionForm.jsx";
 import { BankFilters, emptyFilters } from "../components/BankPicker.jsx";
+import { CardDrawerArt } from "../components/illustrations.jsx";
 import { VersionDiff } from "../components/VersionDiff.jsx";
 import {
   Banner, DifficultyScale, EmptyState, KindTag, Loading, LoadError, ModeLabel, VersionTag,
@@ -58,9 +59,9 @@ export default function QuestionBank({ api, navigate }) {
         {found.error && <LoadError error={found.error} retry={found.reload} />}
         {found.loading && !found.data && <Loading label="Searching the bank" />}
         {found.data && <p className="au-sub au-count" role="status">{found.data.length} {found.data.length === 1 ? "question" : "questions"}{Object.values(filters).some(Boolean) ? " match" : ""}</p>}
-        {all.data?.length === 0 && <EmptyState title="The bank is empty" action={<button className="primary" onClick={() => setDialog("new")}>Write the first question</button>}>
+        {all.data?.length === 0 && <EmptyState art={<CardDrawerArt />} title="The bank is empty" action={<button className="primary" onClick={() => setDialog("new")}>Write the first question</button>}>
           Write questions one at a time or import a CSV. Each keeps its full version history.</EmptyState>}
-        {found.data?.length === 0 && all.data?.length > 0 && <EmptyState title="No questions match these filters" action={<button className="secondary" onClick={() => setFilters(emptyFilters)}>Clear filters</button>} />}
+        {found.data?.length === 0 && all.data?.length > 0 && <EmptyState art={<CardDrawerArt />} title="No questions match these filters" action={<button className="secondary" onClick={() => setFilters(emptyFilters)}>Clear filters</button>} />}
         {found.data?.length > 0 && <table className="data-table au-bank-table au-stack">
           <caption className="sr-only">Bank questions, latest version shown</caption>
           <thead><tr><th scope="col">ID</th><th scope="col">Question</th><th scope="col">Type</th><th scope="col">Difficulty</th><th scope="col">Version</th></tr></thead>
@@ -75,7 +76,7 @@ export default function QuestionBank({ api, navigate }) {
       </section>
 
       <aside className="side au-detail" ref={detailRef} tabIndex={-1} aria-labelledby="detail-title">
-        <div className="side-head"><h2 id="detail-title">{current ? `Question ${shortId(selected)}` : "Question record"}</h2>
+        <div className="side-head" data-call={current ? current.topic.toUpperCase() : ""}><h2 id="detail-title">{current ? `Question ${shortId(selected)}` : "Question record"}</h2>
           {current && <p className="au-sub">{detail.data.versions.length} {detail.data.versions.length === 1 ? "version" : "versions"} · current v{current.number}</p>}</div>
         <div className="side-content">
           {notice && <Banner tone={notice.tone}>{notice.text}</Banner>}

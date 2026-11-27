@@ -73,9 +73,9 @@ export function Banner({ tone = "info", title, children, mark }) {
 }
 
 /** Ruled-paper empty state: what is missing and the one action that fixes it. */
-export function EmptyState({ title, children, action }) {
+export function EmptyState({ title, children, action, art }) {
   return <div className="au-empty">
-    <div className="au-empty__page" aria-hidden="true"><i /><i /><i /><i /></div>
+    {art ?? <div className="au-empty__page" aria-hidden="true"><i /><i /><i /><i /></div>}
     <h3>{title}</h3>
     {children && <p>{children}</p>}
     {action}

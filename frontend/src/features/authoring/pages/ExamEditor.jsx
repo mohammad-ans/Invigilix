@@ -11,6 +11,7 @@ import {
 } from "../components/primitives.jsx";
 import { BankPicker } from "../components/BankPicker.jsx";
 import { PaperProfile, WindowTimeline } from "../components/insights.jsx";
+import { ProofSheet, useProofPrint } from "../components/ProofSheet.jsx";
 
 const toDraft = items => items.map(i => ({
   question_id: i.question_id, version_id: i.version.id, max_marks: i.max_marks, version: i.version,
@@ -21,6 +22,7 @@ const toDraft = items => items.map(i => ({
 export default function ExamEditor({ api, params, navigate }) {
   const exam = useResource(() => api.getExam(params.id), [api, params.id]);
   const [copying, setCopying] = useState(false);
+  const [printing, printProof] = useProofPrint();
   const copiedFrom = new URLSearchParams(window.location.search || window.location.hash.split("?")[1] || "").get("copied");
   const [items, setItems] = useState(null);
   const [dirty, setDirty] = useState(false);
@@ -100,7 +102,7 @@ export default function ExamEditor({ api, params, navigate }) {
 
     {copiedFrom && !frozen && <Banner tone="ok" title="New draft copied">Particulars and pinned question versions were copied; the roster was not. Set a new window, then re-pin any slot whose bank question now has a newer version.</Banner>}
     {justPublished && <Banner tone="ok" title="Published">The paper is frozen. Enrolled candidates can see its instructions now and start it when the window opens.</Banner>}
-    {frozen ? <FrozenSeal publishedAt={data.published_at} itemCount={data.items.length} />
+    {frozen ? <FrozenSeal publishedAt={data.published_at} itemCount={data.items.length} fresh={justPublished} />
       : ledger.balanced || !items.length ? <Banner tone="info" title="Editable draft">Candidates cannot see this exam. Changes save to the draft until you publish.</Banner>
       : <Banner tone="error" mark="≠" title="Marks do not add up">
           Slots allocate {formatMarks(ledger.allocated / 100)} of the declared {formatMarks(ledger.declared / 100)}. Adjust a slot’s marks or the declared total before publishing.
@@ -172,6 +174,16 @@ export default function ExamEditor({ api, params, navigate }) {
           <div className="side-head"><h2>Allocation</h2></div>
           <div className="side-content"><MarkLedger items={slots} totalMarks={data.total_marks} /></div>
         </section>
+        <section className="side au-proofcard">
+          <div className="side-content">
+            <h3 className="au-subhead">Proof sheet</h3>
+            <p className="au-sub">Print the paper as candidates will read it, for proof-reading on paper. The key version adds the mark scheme.</p>
+            <div className="row au-proofcard__actions">
+              <button type="button" className="secondary" disabled={!data.items.length} onClick={() => printProof(false)}>Print proof</button>
+              <button type="button" className="quiet" disabled={!data.items.length} onClick={() => printProof(true)}>Print with key</button>
+            </div>
+          </div>
+        </section>
         <section className="side">
           <details className="au-profile-card" open>
             <summary><h2>Paper profile</h2></summary>
@@ -196,6 +208,7 @@ export default function ExamEditor({ api, params, navigate }) {
     {picking && <BankPicker api={api} onClose={() => setPicking(false)} exclude={new Set(items.map(i => i.question_id))}
       onPick={question => { edit([...items, { question_id: question.id, version_id: question.latest.id, version: question.latest, latest_version_number: question.version_count, max_marks: "1.00" }]); }} />}
 
+    {printing !== null && <ProofSheet exam={data} withKey={printing} />}
     {confirming && <Dialog title="Publish this paper?" onClose={() => setConfirming(false)}>
       <ErrorSummary error={publishError} title="The server refused publication" describe={i => <>{i.item ? <b>Slot {two(i.item)} · </b> : null}{i.message}</>} />
       <p>Publishing freezes <b>{data.items.length} slots</b>, their question versions, <b>{formatMarks(data.total_marks)} marks</b>, the window and shuffle settings. Enrolled candidates will see the title and instructions.</p>

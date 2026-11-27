@@ -3,6 +3,7 @@ import { PageHead } from "../../../design/Folio.jsx";
 import { paths } from "../paths.js";
 import { useResource } from "../hooks.js";
 import { formatWindow, two } from "../domain/format.js";
+import { TrayArt } from "../components/illustrations.jsx";
 import { ImportPanel } from "../components/ImportPanel.jsx";
 import {
   AccessBadge, Banner, EmptyState, ErrorSummary, Field, Loading, LoadError, ModeLabel, StateBadge, Stat,
@@ -70,7 +71,7 @@ export default function RosterPage({ api, params, navigate }) {
           <Stat label="Blocked" value={two(entries.filter(e => BLOCKED.has(e.access)).length)} tone={entries.some(e => BLOCKED.has(e.access)) ? "warn" : undefined} />
         </div>
         {notice && <p className="au-notice" role="status">{notice}</p>}
-        {entries.length === 0 && <EmptyState title="No candidates enrolled">Add candidate emails or import a roster CSV. Only enabled accounts with the candidate role can be enrolled.</EmptyState>}
+        {entries.length === 0 && <EmptyState art={<TrayArt />} title="No candidates enrolled">Add candidate emails or import a roster CSV. Only enabled accounts with the candidate role can be enrolled.</EmptyState>}
         {entries.length > 0 && shown.length === 0 && <p className="au-none" role="status">No candidates match “{query}”.</p>}
         {shown.length > 0 && <table className="data-table au-stack">
           <caption className="sr-only">Roster for {exam.data.title}</caption>
