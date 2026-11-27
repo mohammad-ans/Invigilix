@@ -43,8 +43,8 @@ export function ExamForm({ initial, submitLabel, onSubmit, onCancel, onDirty }) 
       <textarea rows={3} value={values.instructions} onChange={e => set("instructions", e.target.value)} />
     </Field>
     <div className="au-form__grid">
-      <Field label="Opens" issues={of("opens_at")}><input type="datetime-local" value={values.opens_local} onChange={e => set("opens_local", e.target.value)} /></Field>
-      <Field label="Closes" issues={of("closes_at")} hint={windowMinutes > 0 ? `Window: ${formatDuration(windowMinutes)}` : undefined}>
+      <Field label="Opens" issues={of("opens_at")} hint="Candidates may start from this time."><input type="datetime-local" value={values.opens_local} onChange={e => set("opens_local", e.target.value)} /></Field>
+      <Field label="Closes" issues={of("closes_at")} hint={windowMinutes > 0 ? `Window: ${formatDuration(windowMinutes)}.` : "Must be after the opening time."}>
         <input type="datetime-local" value={values.closes_local} onChange={e => set("closes_local", e.target.value)} /></Field>
       <Field label="Duration (minutes)" issues={of("duration_minutes")}
         hint={windowMinutes > 0 && Number(values.duration_minutes) > windowMinutes ? "Longer than the window: late starters are capped at closing." : "Per attempt. Capped at the closing time."}>

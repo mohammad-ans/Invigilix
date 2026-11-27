@@ -48,11 +48,11 @@ export default function ExamRegister({ api, navigate }) {
 
       {shown.length > 0 && <table className="data-table au-ledger-table au-stack">
         <caption className="sr-only">Exams you own, newest window first</caption>
-        <thead><tr><th scope="col">№</th><th scope="col">Exam</th><th scope="col">Window</th><th scope="col">Paper</th><th scope="col">Roster</th><th scope="col">State</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+        <thead><tr><th scope="col">No.</th><th scope="col">Exam</th><th scope="col">Window</th><th scope="col">Paper</th><th scope="col">Roster</th><th scope="col">State</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
         <tbody>{shown.map((e, n) => {
           const balanced = Number(e.allocated_marks) === Number(e.total_marks) && e.item_count > 0;
           return <tr key={e.id}>
-            <td data-label="№" className="au-entry-no">{two(n + 1)}</td>
+            <td data-label="No." className="au-entry-no">{two(n + 1)}</td>
             <td data-label="Exam"><a className="au-exam-title" href={paths.edit(e.id)} onClick={ev => { ev.preventDefault(); navigate(paths.edit(e.id)); }}>{e.title}</a>
               <span className="au-sub">{formatDuration(e.duration_minutes)} per attempt{e.shuffle_questions ? " · shuffled" : ""}</span></td>
             <td data-label="Window" className="au-mono">{formatWindow(e.opens_at, e.closes_at)}</td>

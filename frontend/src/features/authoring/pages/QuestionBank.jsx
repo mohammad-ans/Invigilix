@@ -64,7 +64,7 @@ export default function QuestionBank({ api, navigate }) {
           <caption className="sr-only">Bank questions, latest version shown</caption>
           <thead><tr><th scope="col">ID</th><th scope="col">Question</th><th scope="col">Type</th><th scope="col">Difficulty</th><th scope="col">Version</th></tr></thead>
           <tbody>{found.data.map(q => <tr key={q.id} className={selected === q.id ? "au-row--selected" : ""} aria-current={selected === q.id ? "true" : undefined}>
-            <td data-label="ID" className="au-mono au-sub">{shortId(q.id)}</td>
+            <td data-label="ID"><span className="au-mono au-id">{shortId(q.id)}</span></td>
             <td data-label="Question"><button type="button" className="au-row-link" onClick={() => open(q.id)}>{q.latest.prompt}</button><span className="au-sub">{q.latest.topic}</span></td>
             <td data-label="Type"><KindTag kind={q.latest.kind} /></td>
             <td data-label="Difficulty"><DifficultyScale level={q.latest.difficulty} /></td>
@@ -84,7 +84,7 @@ export default function QuestionBank({ api, navigate }) {
           {current && <>
             <div className="au-slot__meta"><KindTag kind={current.kind} /><span>{current.topic}</span><DifficultyScale level={current.difficulty} /></div>
             <p className="au-detail__prompt">{current.prompt}</p>
-            {current.options.length > 0 && <ol className="au-keylist">{current.options.map((o, n) => <li key={o.id} className={o.correct ? "key" : ""}>
+            {current.options.length > 0 && <ol className="au-keylist">{current.options.map((o, n) => <li key={o.id} className={o.correct ? "au-is-key" : ""}>
               <span className="opt-letter">{letter(n)}</span>{o.label}{o.correct && <span className="au-keymark"><span aria-hidden="true">✓</span> Key</span>}</li>)}</ol>}
             <p className="au-sub">Marking: {RULE[current.marking_rule]}</p>
             {current.rubric && <div className="au-rubric"><span className="mini">Rubric · private</span><p>{current.rubric}</p></div>}

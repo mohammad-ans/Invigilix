@@ -60,13 +60,13 @@ export function QuestionForm({ initial, submitLabel, onSubmit, onCancel, note })
           {RULES_FOR_KIND[q.kind].map(r => <option key={r} value={r}>{RULE[r]}</option>)}</select></Field>
     </div>
 
-    {objective && <fieldset className={`au-options${keyIssues.length || of("options").length ? " au-field--invalid" : ""}`}>
-      <legend className="au-field__label">Options and key <span className="au-sub">· {q.kind === "single" ? "mark exactly one correct option" : "mark every correct option"}</span></legend>
+    {objective && <fieldset className={`au-options${keyIssues.length || of("options").length ? " au-options--invalid" : ""}`}>
+      <legend className="au-field__label">Options and key <span className="au-sub au-inline">· {q.kind === "single" ? "mark exactly one correct option" : "mark every correct option"}</span></legend>
       <ol>{q.options.map((o, n) => {
         const isKey = q.correct_option_ids.includes(o.id);
         return <li key={o.id} className={isKey ? "au-option--key" : ""}>
           <span className="opt-letter" aria-hidden="true">{letter(n)}</span>
-          <input aria-label={`Option ${letter(n)} label`} value={o.label} onChange={e => set({ options: q.options.map(x => x.id === o.id ? { ...x, label: e.target.value } : x) })} />
+          <input aria-label={`Option ${letter(n)} label`} aria-invalid={error && !o.label.trim() ? true : undefined} value={o.label} onChange={e => set({ options: q.options.map(x => x.id === o.id ? { ...x, label: e.target.value } : x) })} />
           <label className="au-key"><input type={q.kind === "single" ? "radio" : "checkbox"} name="key" checked={isKey} onChange={() => toggleKey(o.id)} />
             <span>{isKey ? "✓ Key" : "Key"}</span><span className="sr-only"> for option {letter(n)}</span></label>
           <button type="button" className="au-icon au-icon--remove" disabled={q.options.length <= 2} onClick={() => removeOption(o.id)} aria-label={`Remove option ${letter(n)}`}>×</button>

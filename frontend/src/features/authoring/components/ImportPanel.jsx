@@ -75,11 +75,10 @@ export function ImportPanel({ template, noun, validate, commit, onImported }) {
       </dl>}
       {report.issues.length > 0 && <table className="data-table au-proof__table">
         <caption className="sr-only">Rows that need correction</caption>
-        <thead><tr><th scope="col">Row</th><th scope="col">Field</th><th scope="col">Correction</th></tr></thead>
+        <thead><tr><th scope="col">Row</th><th scope="col">Field and correction</th></tr></thead>
         <tbody>{report.issues.map((i, n) => <tr key={n}>
-          <td data-label="Row" className="au-mono">{i.row ?? "—"}</td>
-          <td data-label="Field"><code>{i.field ?? "file"}</code></td>
-          <td data-label="Correction">{i.message}</td></tr>)}</tbody>
+          <td className="au-mono">{i.row ?? "—"}</td>
+          <td><code>{i.field ?? "file"}</code><span>{i.message}</span></td></tr>)}</tbody>
       </table>}
     </section>}
 
