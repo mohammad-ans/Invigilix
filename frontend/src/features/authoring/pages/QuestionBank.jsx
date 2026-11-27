@@ -7,6 +7,7 @@ import { Dialog } from "../components/instruments.jsx";
 import { ImportPanel } from "../components/ImportPanel.jsx";
 import { QuestionForm, blankQuestion } from "../components/QuestionForm.jsx";
 import { BankFilters, emptyFilters } from "../components/BankPicker.jsx";
+import { VersionDiff } from "../components/VersionDiff.jsx";
 import {
   Banner, DifficultyScale, EmptyState, KindTag, Loading, LoadError, ModeLabel, VersionTag,
 } from "../components/primitives.jsx";
@@ -101,6 +102,10 @@ export default function QuestionBank({ api, navigate }) {
               <span className="au-history__tag">v{v.number}{n === 0 ? " · current" : ""}</span>
               <p>{v.prompt}</p>
               {v.options.length > 0 && <p className="au-sub">Key: {v.options.map((o, i) => o.correct ? letter(i) : null).filter(Boolean).join(", ")} · {v.options.length} options</p>}
+              {detail.data.versions[n + 1] && <details className="au-diff-toggle" open={n === 0}>
+                <summary>Changes from v{detail.data.versions[n + 1].number}</summary>
+                <VersionDiff prev={detail.data.versions[n + 1]} next={v} />
+              </details>}
             </li>)}</ol>
           </>}
         </div>

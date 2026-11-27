@@ -334,6 +334,19 @@
 .au-topics__track span { display: block; height: 100%; background: var(--green); }
 .au-topics .au-mono { text-align: right; color: var(--muted); }
 
+/* ---------------------------------------------------------- version diff */
+.au-diff-toggle { margin-top: 6px; }
+.au-diff-toggle > summary { font: 600 12px var(--sans); color: var(--forest); padding: 4px 0; }
+.au-diff { margin-top: 6px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--sheet); display: grid; gap: 8px; }
+.au-diff del { color: var(--rust); background: var(--rust-bg); text-decoration: line-through; text-decoration-thickness: 1px; }
+.au-diff ins { color: var(--forest); background: var(--sage); text-decoration: underline; text-underline-offset: 3px; }
+.au-diff del, .au-diff ins { padding: 0 2px; border-radius: 2px; }
+.au-diff__prompt { font: 15px/1.5 var(--serif); }
+.au-diff__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
+.au-diff__what { font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 4px; }
+.au-diff__key { font: 600 11px var(--mono); color: var(--rust); }
+.au-diff__key--on { color: var(--forest); }
+
 /* ---------------------------------------------------------- responsive */
 @media (max-width: 1100px) {
   .au-slot { grid-template-columns: 44px minmax(0, 1fr) 128px; }

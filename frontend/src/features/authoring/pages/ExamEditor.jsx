@@ -98,7 +98,7 @@ export default function ExamEditor({ api, params, navigate }) {
         <button className="secondary" onClick={() => navigate(paths.preview(data.id))}>Preview as candidate</button>
       </div>} />
 
-    {copiedFrom && !frozen && <Banner tone="ok" title="New draft copied">Particulars and pinned question versions were copied; the roster was not. Set a new window, then review any slot marked “v… available”.</Banner>}
+    {copiedFrom && !frozen && <Banner tone="ok" title="New draft copied">Particulars and pinned question versions were copied; the roster was not. Set a new window, then re-pin any slot whose bank question now has a newer version.</Banner>}
     {justPublished && <Banner tone="ok" title="Published">The paper is frozen. Enrolled candidates can see its instructions now and start it when the window opens.</Banner>}
     {frozen ? <FrozenSeal publishedAt={data.published_at} itemCount={data.items.length} />
       : ledger.balanced || !items.length ? <Banner tone="info" title="Editable draft">Candidates cannot see this exam. Changes save to the draft until you publish.</Banner>

@@ -37,6 +37,7 @@ app.include_router(build_router(authoring, current_actor), prefix="/api")
 | `GET /exams/{id}` | Particulars, pinned slots and the publication checklist | |
 | `PUT /exams/{id}/items` | Replace the slot list: `[{question_id, max_marks, version_id?}]` | An existing pin is kept unless `version_id` is given |
 | `POST /exams/{id}/publish` | Validate under the exam lock, then freeze | 422 `paper_invalid` with item and field issues |
+| `POST /exams/{id}/duplicate` | Copy particulars and pinned versions into a new draft (any source state) | 201; roster not copied; original untouched |
 | `POST /exams/{id}/preview` | Sandbox paper in the attempt-item shape, without keys | Writes nothing |
 | `GET·POST /exams/{id}/enrollments` · `PATCH …/{candidate_id}` | Roster, enroll by email, withdraw or restore | 409 `exam_closed` after close |
 | `POST /exams/{id}/enrollments/import?dry_run=` | Roster CSV (`candidate_email`) | `text/csv` body, 2 MB maximum |
