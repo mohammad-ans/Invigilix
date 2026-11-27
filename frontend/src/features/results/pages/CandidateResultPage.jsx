@@ -7,7 +7,7 @@ import {
 } from "../components/primitives.jsx";
 import { formatDateTime } from "../domain/rules.js";
 import { paths } from "../paths.js";
-import { RedPenMark, VerificationStub } from "../components/instruments.jsx";
+import { RedPenMark, ResultSlip, VerificationStub } from "../components/instruments.jsx";
 
 export default function CandidateResultPage({ api, params, navigate }) {
   const attemptId = params?.id;
@@ -115,17 +115,7 @@ export default function CandidateResultPage({ api, params, navigate }) {
       )}
 
       <section className="board" style={{ marginBottom: 20 }}>
-        <div className="res-score-hero">
-          <div>
-            <span className="mini">Released official score</span>
-            <div>
-              <strong>{result.total_score}</strong>{" "}
-              <span className="res-muted">/ {result.max_marks} marks</span>
-            </div>
-          </div>
-          <StatusPill tone="sage" glyph="✓" label={`Closed (${result.close_reason})`} />
-        </div>
-
+        <ResultSlip score={result.total_score} max={result.max_marks} closeReason={result.close_reason} />
       </section>
 
       <div className="res-stack">

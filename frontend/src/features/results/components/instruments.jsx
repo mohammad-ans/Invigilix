@@ -136,3 +136,25 @@ export function VerificationStub({ code, digest, releasedAt, copied, onCopy, ver
     </div>
   </section>;
 }
+
+/** The released score as a result slip: set figure, ruled mark bar, particulars. */
+export function ResultSlip({ score, max, closeReason }) {
+  const value = Number(score), cap = Number(max);
+  const share = cap > 0 ? Math.min(Math.max(value / cap, 0), 1) : 0;
+  const cells = cap > 0 && cap <= 20 && Number.isInteger(cap) ? cap : 10;
+  return <div className="res-slip">
+    <div className="res-slip__figure">
+      <span className="mini">Released official score</span>
+      <p><strong>{value.toFixed(2)}</strong><span className="res-slip__of">out of {cap.toFixed(2)}</span></p>
+    </div>
+    <div className="res-slip__rule" aria-hidden="true">
+      <span className="res-slip__fill" style={{ width: `${share * 100}%` }} />
+      {Array.from({ length: cells - 1 }, (_, i) => <i key={i} style={{ left: `${((i + 1) * 100) / cells}%` }} />)}
+    </div>
+    <dl className="res-slip__facts">
+      <div><dt>Percentage</dt><dd>{Math.round(share * 100)}%</dd></div>
+      <div><dt>Attempt</dt><dd>{closeReason === "expired" ? "Closed at deadline" : "Submitted"}</dd></div>
+      <div><dt>Status</dt><dd>✓ Released and frozen</dd></div>
+    </dl>
+  </div>;
+}
