@@ -1,0 +1,22 @@
+{
+  "work/authoring": {
+    "requirements": ["FR03","FR04","FR05","FR06","SR03","SR04"],
+    "tests": ["AT02","AT03","AT06","AT10"],
+    "paths": ["frontend/src/features/authoring/","backend/app/features/authoring/","tests/authoring/"]
+  },
+  "work/delivery": {
+    "requirements": ["FR07","FR08","FR09","IN01","IN02","SR01","SR07","SR08"],
+    "tests": ["AT03","AT04","AT05","AT11"],
+    "paths": ["frontend/src/features/delivery/","backend/app/features/delivery/","tests/delivery/"]
+  },
+  "work/results": {
+    "requirements": ["FR10","FR11","FR12","SR02","SR05","SR06"],
+    "tests": ["AT06","AT07","AT08","AT09"],
+    "paths": ["frontend/src/features/results/","backend/app/features/results/","tests/results/"]
+  },
+  "foundation/*": {
+    "requirements": ["FR01","FR02","NFR01","NFR02","NFR03","NFR04","NFR05","NFR06","DEL01"],
+    "tests": ["AT01","AT12"],
+    "paths": ["AGENTS.md","CLAUDE.md","GEMINI.md","README.md",".gitignore",".github/","docs/","contracts/","collaboration/","tools/","frontend/package.json","frontend/package-lock.json","frontend/index.html","frontend/public/","frontend/src/main.jsx","frontend/src/design/","frontend/src/platform/","backend/app/main.py","backend/app/platform/","backend/migrations/","backend/pyproject.toml","tests/integration/"]
+  }
+}
