@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { detailsIssues, groupIssues } from "../domain/rules.js";
 import { formatDuration, fromLocalInput, toLocalInput } from "../domain/format.js";
 import { ErrorSummary, Field } from "./primitives.jsx";
+import { WindowTimeline } from "./insights.jsx";
 
 export const blankDetails = () => {
   const start = new Date(Date.now() + 7 * 864e5);
@@ -52,6 +53,7 @@ export function ExamForm({ initial, submitLabel, onSubmit, onCancel, onDirty }) 
       <Field label="Declared total marks" issues={of("total_marks")} hint="Slot marks must add up to this.">
         <input inputMode="decimal" value={values.total_marks} onChange={e => set("total_marks", e.target.value)} /></Field>
     </div>
+    <WindowTimeline opens={fromLocalInput(values.opens_local)} closes={fromLocalInput(values.closes_local)} duration={values.duration_minutes} />
     <fieldset className="au-form__toggles"><legend className="au-field__label">Shuffle for each candidate</legend>
       <label className="au-check"><input type="checkbox" checked={values.shuffle_questions} onChange={e => set("shuffle_questions", e.target.checked)} /> Question order</label>
       <label className="au-check"><input type="checkbox" checked={values.shuffle_choices} onChange={e => set("shuffle_choices", e.target.checked)} /> Choice order</label>

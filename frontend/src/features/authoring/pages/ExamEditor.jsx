@@ -10,6 +10,7 @@ import {
   Banner, DifficultyScale, ErrorSummary, KindTag, Loading, LoadError, ModeLabel, StateBadge, VersionTag,
 } from "../components/primitives.jsx";
 import { BankPicker } from "../components/BankPicker.jsx";
+import { PaperProfile, WindowTimeline } from "../components/insights.jsx";
 
 const toDraft = items => items.map(i => ({
   question_id: i.question_id, version_id: i.version.id, max_marks: i.max_marks, version: i.version,
@@ -154,6 +155,7 @@ export default function ExamEditor({ api, params, navigate }) {
         <article className="sheet au-section" aria-labelledby="particulars-title">
           <div className="folio-line"><span className="qno">Particulars</span>{detailsDirty && <SaveStatus state="pending">Unsaved particulars</SaveStatus>}</div>
           <h2 id="particulars-title" className="au-h2">{frozen ? "Frozen schedule and settings" : "Title, window and marking"}</h2>
+          {frozen && <WindowTimeline opens={data.opens_at} closes={data.closes_at} duration={data.duration_minutes} />}
           {frozen ? <dl className="au-record">
             <div><dt>Instructions</dt><dd>{data.instructions || "—"}</dd></div>
             <div><dt>Opens</dt><dd className="au-mono">{formatDate(data.opens_at, { withZone: true })}</dd></div>
@@ -169,6 +171,12 @@ export default function ExamEditor({ api, params, navigate }) {
         <section className="side">
           <div className="side-head"><h2>Allocation</h2></div>
           <div className="side-content"><MarkLedger items={slots} totalMarks={data.total_marks} /></div>
+        </section>
+        <section className="side">
+          <details className="au-profile-card" open>
+            <summary><h2>Paper profile</h2></summary>
+            <div className="side-content"><PaperProfile slots={slots} /></div>
+          </details>
         </section>
         {!frozen && <section className="side">
           <div className="side-content">
