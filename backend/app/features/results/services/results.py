@@ -14,6 +14,7 @@ from ..domain import (
     NotFound,
     QuestionAnalytics,
     ResultReportRecord,
+    ScoreRegister,
     compute_attempt_total,
     compute_class_summary,
     compute_question_analytics,
@@ -147,41 +148,29 @@ class ResultsService:
         )
 
         attempt_rows: list[CandidateAttemptScoreView] = []
-        for att in sorted(
-            finalized,
-            key=lambda a: (
-                accounts.get(a.candidate_id).display_name.lower()
-                if a.candidate_id in accounts
-                else str(a.candidate_id)
-            ),
-        ):
-            items = items_by_attempt.get(att.id, ())
-            graded_count = sum(1 for it in items if it.awarded_marks is not None)
-            total = compute_attempt_total(it.awarded_marks for it in items)
-            acct = accounts.get(att.candidate_id)
-            report = reports_by_attempt.get(att.id)
+        for line in ScoreRegister.build(finalized, items_by_attempt, accounts):
+            report = reports_by_attempt.get(line.attempt.id)
             row_status = (
                 "released"
                 if exam.results_published_at is not None
-                else ("graded" if total is not None else "pending_grade")
+                else ("graded" if line.fully_graded else "pending_grade")
             )
             attempt_rows.append(
                 CandidateAttemptScoreView(
-                    attempt_id=att.id,
-                    candidate_id=att.candidate_id,
-                    display_name=acct.display_name if acct else str(att.candidate_id),
-                    email=acct.email if acct else "",
-                    close_reason=att.close_reason or "submitted",
-                    finalized_at=att.finalized_at,
-                    graded_count=graded_count,
-                    item_count=len(items),
-                    total_score=total,
+                    attempt_id=line.attempt.id,
+                    candidate_id=line.attempt.candidate_id,
+                    display_name=line.display_name,
+                    email=line.email,
+                    close_reason=line.attempt.close_reason or "submitted",
+                    finalized_at=line.attempt.finalized_at,
+                    graded_count=line.graded_count,
+                    item_count=line.item_count,
+                    total_score=line.total_score,
                     max_marks=exam.total_marks,
                     status=row_status,
                     verification_code=report.verification_code if report else None,
                 )
             )
-
         return ExamResultsView(
             exam_id=exam.id,
             exam_title=exam.title,

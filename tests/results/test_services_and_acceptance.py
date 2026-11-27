@@ -225,6 +225,10 @@ def test_at07_and_at09_grade_release_pdf_and_verify(harness):
 
     # Original digest verifies; altered PDF digest fails; wrong code fails
     assert harness.module.reports.verify_report(cand_res.verification_code, cand_res.sha256_hex) is True
+    # A verifier copies from paper: lowercase, spaces for hyphens, digest in groups of four
+    typed_code = cand_res.verification_code.lower().replace("-", " ")
+    typed_digest = " ".join(cand_res.sha256_hex[i:i + 4] for i in range(0, 64, 4)).upper()
+    assert harness.module.reports.verify_report(typed_code, typed_digest) is True
     tampered_bytes = dl1.pdf_bytes + b"\n%tampered"
     import hashlib
     tampered_hex = hashlib.sha256(tampered_bytes).hexdigest()
