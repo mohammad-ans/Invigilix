@@ -84,7 +84,7 @@ class _Questions(QuestionRepository):
                 continue
             if query.kind and c.kind is not query.kind:
                 continue
-            if text and text not in f"{c.prompt} {c.topic} {q.id}".casefold():
+            if text and text not in f"{c.prompt} {c.topic}".casefold():
                 continue
             found.append(q)
         return found

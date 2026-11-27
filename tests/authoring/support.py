@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.features.authoring.domain import (
     AccountRecord, AnswerOption, Difficulty, ExamDetails, MarkingRule, QuestionContent,
@@ -100,6 +100,41 @@ def memory_world() -> World:
                   lambda: repr(sorted((k, repr(v)) for k, v in vars(db.store).items())))
     populate(db.store.add_account, world)
     return world
+
+
+def sql_world() -> World:
+    """SQLite in memory through the SQLAlchemy adapter, using the contract tables."""
+    from sqlalchemy import create_engine, insert, select
+    from sqlalchemy.pool import StaticPool
+
+    from app.features.authoring.adapters import sql_tables as t
+    from app.features.authoring.adapters.sql import SqlDatabase
+
+    engine = create_engine("sqlite://", poolclass=StaticPool,
+                           connect_args={"check_same_thread": False})
+    t.metadata.create_all(engine)
+    clock = Clock()
+    db = SqlDatabase(engine, hasher=lambda secret: "test-hash:" + secret[::-1], clock=clock)
+    world = World(AuthoringModule(db.unit_of_work), clock, lambda: _dump(engine, t, select))
+
+    def add_account(email, display_name, *roles, enabled=True):
+        record = AccountRecord(uuid4(), email, display_name, enabled, frozenset(roles))
+        with engine.begin() as conn:
+            conn.execute(insert(t.account).values(id=record.id, email=email,
+                                                  display_name=display_name,
+                                                  password_hash="x", enabled=enabled))
+            for role in roles:
+                conn.execute(insert(t.account_role).values(account_id=record.id, role_name=role))
+        return record
+
+    populate(add_account, world)
+    return world
+
+
+def _dump(engine, tables, select) -> list:
+    with engine.connect() as conn:
+        return [(table.name, sorted(map(repr, conn.execute(select(table)).all())))
+                for table in tables.metadata.sorted_tables]
 
 
 def marks(value: str) -> Decimal:

@@ -34,7 +34,8 @@ class QuestionContent:
         return QuestionContent(
             topic=self.topic.strip(), difficulty=self.difficulty, kind=self.kind,
             prompt=self.prompt.strip(), marking_rule=self.marking_rule,
-            options=tuple(AnswerOption(o.id, o.label.strip(), o.correct) for o in self.options),
+            options=tuple(AnswerOption(o.id, o.label.strip(), o.correct)
+                          for o in sorted(self.options, key=lambda o: o.id)),
             rubric=rubric,
         )
 
