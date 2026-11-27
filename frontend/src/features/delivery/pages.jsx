@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PageHead, SaveStatus } from "../../design/Folio.jsx";
 import "../../design/folio.css";
 import "./delivery.css";
 import { AttemptSession } from "./session.js";
 import { visibleItem } from "./queue.js";
+import Engraving from "./Engraving.jsx";
 export { purgeDeliveryAccount } from "./store.js";
 
 const date = (value) => new Date(value).toLocaleString();
@@ -66,6 +67,8 @@ function Countdown({ deadline, session, offset, onExpiry }) {
 
 function Receipt({ state, preview }) {
   const { receipt, outstanding = [] } = state;
+  const heading = useRef(null);
+  useEffect(() => { heading.current?.focus(); }, []);
   return (
     <main className="shell dv">
       <PageHead
@@ -73,12 +76,13 @@ function Receipt({ state, preview }) {
         title={receipt.close_reason === "expired" ? "Time expired" : "Attempt submitted"}
         details={state.title}
       />
-      <section className="dv-receipt" aria-labelledby="receipt-title">
+      <section className="dv-receipt" data-reason={receipt.close_reason} aria-labelledby="receipt-title">
         <header>
-          <span className="dv-seal" aria-hidden="true">
-            ✓
-          </span>
-          <h2 id="receipt-title">Final receipt</h2>
+          <h2 id="receipt-title" tabIndex={-1} ref={heading}>Final receipt</h2>
+          <div className="dv-imprint" aria-hidden="true">
+            <Engraving />
+            <span>{receipt.close_reason === "expired" ? "Expired" : "Filed"}</span>
+          </div>
         </header>
         <dl>
           <dt>Finalized</dt>
@@ -124,7 +128,7 @@ function ReviewList({ items, record, navigate }) {
                 <span className="dv-response">{answerText(q)}</span>
               </span>
               <span className="dv-review-state">
-                {[sync, q.flagged ? "Flagged" : ""].filter(Boolean).join(" · ") || "Edit"} ↗
+                {[sync, q.flagged ? "Flagged" : ""].filter(Boolean).join(" · ") || "Edit"}
               </span>
             </button>
           </li>
@@ -146,14 +150,17 @@ export function AttemptView({ state, session, preview = false }) {
   const [prefBusy, setPrefBusy] = useState(false);
   const reviewHeading = useRef(null),
     prompt = useRef(null);
+  const focusQuestion = useRef(false);
   const { record, receipt, error } = state;
   const paper = record?.paper;
   useEffect(() => {
     if (elapsed && !receipt) session.refresh();
   }, [elapsed, session, Boolean(receipt)]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (review) reviewHeading.current?.focus();
-  }, [review]);
+    else if (focusQuestion.current) prompt.current?.focus();
+    focusQuestion.current = false;
+  }, [review, position]);
   if (receipt) return <Receipt state={state} preview={preview} />;
   if (!record)
     return (
@@ -196,6 +203,8 @@ export function AttemptView({ state, session, preview = false }) {
     session.edit(item, patch);
   }
   function go(n) {
+    if (n === position && !review) prompt.current?.focus();
+    else focusQuestion.current = true;
     jump(n);
     setReview(false);
     if (!preview && session.id) {
@@ -204,7 +213,6 @@ export function AttemptView({ state, session, preview = false }) {
         "",
       );
     }
-    requestAnimationFrame(() => prompt.current?.focus());
   }
   async function preference(patch) {
     setPrefBusy(true);
@@ -241,7 +249,7 @@ export function AttemptView({ state, session, preview = false }) {
         }
       />
       <a className="dv-jump" href="#delivery-sheet">
-        Go to answer sheet ↓
+        Go to answer sheet
       </a>
       {elapsed && (
         <p className="dv-notice" role="status">
@@ -262,7 +270,7 @@ export function AttemptView({ state, session, preview = false }) {
         </p>
       )}
       <div className="workgrid">
-        <article className="sheet dv-paper">
+        <article className="sheet dv-paper" key={review ? "review" : item.slot}>
           {review ? (
             <>
               <div className="dv-sheet-rule">
@@ -312,7 +320,7 @@ export function AttemptView({ state, session, preview = false }) {
               <header className="dv-paper-head">
                 <div className="dv-folio-no">
                   <span>Question</span>
-                  <b>{String(item.display_no).padStart(2, "0")}</b>
+                  <b><span>{String(item.display_no).padStart(2, "0")}</span></b>
                 </div>
                 <div className="dv-type">
                   {type}
@@ -326,7 +334,7 @@ export function AttemptView({ state, session, preview = false }) {
                   disabled={locked}
                   onClick={() => edit({ flagged: !item.flagged })}
                 >
-                  <i aria-hidden="true" className="shape-flag" />
+                  <i aria-hidden="true" className="dv-bookmark" />
                   {item.flagged ? "Flagged" : "Flag for review"}
                 </button>
               </header>
@@ -427,7 +435,6 @@ export function AttemptView({ state, session, preview = false }) {
                   onClick={() => (index + 1 === items.length ? setReview(true) : go(index + 1))}
                 >
                   {index + 1 === items.length ? "Review answers" : "Next question"}
-                  <span aria-hidden="true"> →</span>
                 </button>
               </div>
             </>
@@ -438,9 +445,6 @@ export function AttemptView({ state, session, preview = false }) {
             <div className="side-head">
               <div className="split">
                 <h2>Answer sheet</h2>
-                <span className="dv-sheet-glyph" aria-hidden="true">
-                  ▤
-                </span>
               </div>
               <div className="progress-top">
                 <span>Answered</span>
@@ -470,11 +474,7 @@ export function AttemptView({ state, session, preview = false }) {
                     onClick={() => go(n)}
                   >
                     {String(q.display_no).padStart(2, "0")}
-                    {answered(q) && (
-                      <span aria-hidden="true" className="done-mark">
-                        ✓
-                      </span>
-                    )}
+                    {answered(q) && <span aria-hidden="true" className="dv-punch" />}
                   </button>
                 ))}
               </nav>
@@ -546,7 +546,6 @@ function LiveAttempt({ accountId, attemptId }) {
   useEffect(() => {
     const model = new AttemptSession(accountId, attemptId, setState);
     setSession(model);
-    model.init();
     const logout = (id) => {
       if (id !== accountId) return;
       model.active = false;
@@ -558,25 +557,42 @@ function LiveAttempt({ accountId, attemptId }) {
       typeof BroadcastChannel === "function" ? new BroadcastChannel("folio-delivery-logout") : null;
     if (channel) channel.onmessage = (e) => logout(e.data);
     window.addEventListener("folio-delivery-logout", localLogout);
-    const refresh = () => model.refresh();
-    let reconnectRetry;
+    let timer;
+    let retryDelay = 1000;
+    function schedule() {
+      clearTimeout(timer);
+      if (!model.active || model.closed || model.state.denied) return;
+      let delay = 15000;
+      if (!navigator.onLine) {
+        // A local check also catches a missed online event after an offline reload.
+        delay = retryDelay = 1000;
+      } else if (model.state.error && (!model.record || model.record.pending.length)) {
+        delay = retryDelay;
+        retryDelay = Math.min(retryDelay * 2, 15000);
+      } else {
+        retryDelay = 1000;
+      }
+      timer = setTimeout(poll, delay);
+    }
+    async function poll() {
+      if (navigator.onLine) await model.refresh();
+      schedule();
+    }
     const reconnect = () => {
-      clearTimeout(reconnectRetry);
-      refresh();
-      // The browser can signal "online" before the first API request can connect.
-      reconnectRetry = setTimeout(() => {
-        if (navigator.onLine && model.state.error) refresh();
-      }, 1000);
+      clearTimeout(timer);
+      retryDelay = 1000;
+      poll();
     };
-    const interval = setInterval(refresh, 15000);
+    model.init().then(schedule);
     window.addEventListener("online", reconnect);
+    window.addEventListener("offline", schedule);
     return () => {
       model.active = false;
-      clearInterval(interval);
-      clearTimeout(reconnectRetry);
+      clearTimeout(timer);
       channel?.close();
       window.removeEventListener("folio-delivery-logout", localLogout);
       window.removeEventListener("online", reconnect);
+      window.removeEventListener("offline", schedule);
     };
   }, [accountId, attemptId]);
   return session && <AttemptView state={state} session={session} />;

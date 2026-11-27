@@ -77,6 +77,12 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   };
   await page.goto(origin+"/me/exams");
   await page.getByText("Field ecology").waitFor();
+  const plate = page.locator(".dv-ticket .dv-engraving");
+  const animationName = locator => locator.evaluate(el => getComputedStyle(el).animationName);
+  assert.equal(await animationName(plate), "dv-register-plate");
+  await page.emulateMedia({reducedMotion:"reduce"});
+  assert.equal(await animationName(plate), "none");
+  await page.emulateMedia({reducedMotion:"no-preference"});
   await shot("dashboard-desktop");
   await page.getByRole("button", {name:/, 1 exam$/}).first().click();
   assert.equal(await page.locator(".dv-entry").count(),1);
@@ -94,6 +100,17 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   await page.getByRole("radio").first().check();
   await page.getByText("Saved on server",{exact:true}).waitFor();
   assert.deepEqual(items[0].selected_option_ids,[1]);
+  // A candidate can move straight from a page turn into the response field.
+  const keepsFocus = await page.evaluate(async () => {
+    document.querySelector('button[aria-label="Question 3, unanswered"]').click();
+    await Promise.resolve();
+    const input = document.querySelector(".dv-written");
+    input.focus();
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    return document.activeElement === input;
+  });
+  assert.equal(keepsFocus, true);
+  await page.getByRole("button", {name:"Question 1, answered"}).click();
   await page.setViewportSize({width:360,height:800});
   await page.getByText("Workspace settings",{exact:true}).click();
   await page.getByLabel("Text size").selectOption("200");
@@ -103,10 +120,14 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   await page.getByText("Scratchpad",{exact:true}).click();
   await page.getByLabel("Private rough work").fill("Private note");
   await context.setOffline(true);
+  await page.emulateMedia({reducedMotion:"reduce"});
   await page.getByRole("button",{name:"Question 3, unanswered"}).focus();
   await page.keyboard.press("Enter");
+  await page.waitForFunction(()=>document.activeElement?.id==="delivery-prompt");
+  assert.equal(await animationName(page.locator(".dv-folio-no b span")), "none");
   await page.getByLabel("Your answer").fill("My offline draft");
   await page.getByText("On this device",{exact:true}).waitFor();
+  assert.equal(await page.getByLabel("Your answer").evaluate(el=>el===document.activeElement),true);
   await page.reload();
   await page.getByLabel("Your answer").waitFor();
   assert.equal(await page.getByRole("button",{name:"Question 3, answered"}).getAttribute("aria-current"),"step");
@@ -141,6 +162,8 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   await page.getByRole("button",{name:"Review answers",exact:true}).last().click();
   await page.getByRole("button",{name:"Confirm submission"}).click();
   await page.getByRole("heading",{name:"Final receipt"}).waitFor();
+  assert.equal(await animationName(page.locator(".dv-imprint")),"none");
+  assert.equal(await page.evaluate(()=>document.activeElement?.id),"receipt-title");
   assert.equal(await localCount(page),0);
   await shot("receipt-mobile");
 });

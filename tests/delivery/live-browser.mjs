@@ -61,6 +61,9 @@ try {
   });
   assert.equal((await remote.json()).revision, 1);
   await device.close();
+  // An already-open document can miss the connectivity notification during reload.
+  await page.evaluate(() => window.addEventListener("online", e => e.stopImmediatePropagation(),
+    { capture: true, once: true }));
   // Reconnection can be announced before the first API read reaches the server.
   await page.route(url, route => route.abort("internetdisconnected"), { times: 1 });
   const conflict = page.waitForResponse(r => r.url() === writtenUrl && r.status() === 409);

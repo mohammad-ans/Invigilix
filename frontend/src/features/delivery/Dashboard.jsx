@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { PageHead } from "../../design/Folio.jsx";
+import Engraving from "./Engraving.jsx";
 import { request } from "./api.js";
 
 const groups = ["available", "upcoming", "completed"];
@@ -89,7 +90,7 @@ function OpeningCalendar({ exams, selected, select }) {
               disabled={!monthIndex}
               onClick={() => setChosen(months[monthIndex - 1])}
             >
-              ←
+              Previous
             </button>
             <button
               className="secondary"
@@ -97,7 +98,7 @@ function OpeningCalendar({ exams, selected, select }) {
               disabled={monthIndex === months.length - 1}
               onClick={() => setChosen(months[monthIndex + 1])}
             >
-              →
+              Next
             </button>
           </div>
         )}
@@ -106,17 +107,18 @@ function OpeningCalendar({ exams, selected, select }) {
   );
 }
 
-function ExamEntry({ exam, entering, onEnter }) {
+function ExamEntry({ exam, entering, onEnter, featured }) {
   return (
-    <article className="dv-entry">
+    <article className={"dv-entry" + (featured ? " dv-ticket" : "")}>
       <time
         className="dv-calendar"
         dateTime={exam.opens_at}
         aria-label={format(exam.opens_at, { dateStyle: "long" })}
       >
-        <span>{format(exam.opens_at, { month: "short" })}</span>
+        {featured && <Engraving />}
+        <span>{format(exam.opens_at, { month: featured ? "long" : "short" })}</span>
         <b>{format(exam.opens_at, { day: "2-digit" })}</b>
-        <small>{format(exam.opens_at, { weekday: "short" })}</small>
+        <small>{format(exam.opens_at, { weekday: featured ? "long" : "short" })}</small>
       </time>
       <div className="dv-entry-copy">
         <h3>{exam.title}</h3>
@@ -133,7 +135,6 @@ function ExamEntry({ exam, entering, onEnter }) {
         {exam.status === "available" && (
           <button className="primary" disabled={Boolean(entering)} onClick={() => onEnter(exam)}>
             {entering === exam.id ? "Opening…" : exam.attempt_id ? "Resume attempt" : "Start exam"}
-            <span aria-hidden="true"> ↗</span>
           </button>
         )}
         {exam.status === "completed" &&
@@ -203,6 +204,8 @@ export function CandidateExams({ navigate = navigateTo }) {
       setEntering(null);
     }
   }
+  const listed = (exams ?? []).filter(e => !selectedDate || dateKey(e.opens_at) === selectedDate);
+  const featured = listed.find(e => e.status === "available") ?? listed.find(e => e.status === "upcoming");
   return (
     <main className="shell dv dv-register">
       <PageHead
@@ -252,9 +255,7 @@ export function CandidateExams({ navigate = navigateTo }) {
               </p>
             )}
             {groups.map((group) => {
-              const entries = exams.filter(
-                (e) => e.status === group && (!selectedDate || dateKey(e.opens_at) === selectedDate),
-              );
+              const entries = listed.filter(e => e.status === group);
               return (
                 entries?.length > 0 && (
                   <section className={"dv-group dv-group-" + group} key={group}>
@@ -269,7 +270,7 @@ export function CandidateExams({ navigate = navigateTo }) {
                       <span>{String(entries.length).padStart(2, "0")}</span>
                     </div>
                     {entries.map((exam) => (
-                      <ExamEntry key={exam.id} exam={exam} entering={entering} onEnter={enter} />
+                      <ExamEntry key={exam.id} exam={exam} entering={entering} onEnter={enter} featured={exam === featured} />
                     ))}
                   </section>
                 )

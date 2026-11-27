@@ -2,6 +2,12 @@
 
 The candidate pages and API implement FR07–FR09, IN01–IN02, SR01, SR07 and SR08. This checkout carries the `work/delivery` reservation on `feature/candidate-workspace`.
 
+## Competition demo
+
+[Watch the candidate journey](media/candidate-demo.mp4). A candidate answers a question, reloads a written draft offline and reconnects after a second device changes the answer. The film follows the choice of draft through review and the server-issued receipt. It uses the React pages, FastAPI router and PostgreSQL with fictional exam data and a test session.
+
+The opening date and final receipt share an original guilloché engraving. The register plate turns into place over 760 ms, the question number advances over 235 ms, and the receipt stamp lands over 410 ms. The timer and response fields stay still. The system reduced-motion preference selects the finished layout immediately.
+
 ## Platform integration
 
 - Mount `CandidateExams` at `/me/exams` and `CandidateAttempt` at `/attempts/:id` inside the authenticated Folio shell. Pass the signed-in account UUID as the string `accountId` and the route UUID as `attemptId`. The list accepts an optional `navigate(path)` callback. The browser uses same-origin JSON requests and the session cookie. Route document navigations to the shell and JSON requests to FastAPI. Authoring can render `AttemptView` with its transient controller and `preview` flag.
