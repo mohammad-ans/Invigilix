@@ -68,3 +68,15 @@ test("AT03: roster distinguishes access states", async () => {
   assert.deepEqual(access, ["awaiting_publication", "awaiting_publication", "enrollment_inactive"]);
   await rejects(a.enroll(draft.id, ["dee.lund@example.test"]), 422, "validation_failed");
 });
+
+test("copy to new draft keeps pins and leaves the frozen original alone", async () => {
+  const a = api();
+  const frozen = (await a.listExams()).find(e => e.title === "Ecology mid-term");
+  const copy = await a.duplicateExam(frozen.id);
+  const original = await a.getExam(frozen.id);
+  assert.equal(copy.state, "draft");
+  assert.equal(copy.title, "Copy of Ecology mid-term");
+  assert.deepEqual(copy.items.map(i => i.version.id), original.items.map(i => i.version.id));
+  assert.equal(original.state, "scheduled");
+  assert.equal((await a.getRoster(copy.id)).entries.length, 0);
+});

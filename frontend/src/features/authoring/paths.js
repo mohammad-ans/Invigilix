@@ -9,7 +9,7 @@ export const paths = {
 
 /** Match a pathname against the authoring routes; returns { name, params } or null. */
 export function matchRoute(pathname) {
-  const clean = pathname.replace(/\/+$/, "") || "/";
+  const clean = pathname.split("?")[0].replace(/\/+$/, "") || "/";
   if (clean === paths.exams) return { name: "exams", params: {} };
   if (clean === paths.questions) return { name: "questions", params: {} };
   const m = clean.match(/^\/examiner\/exams\/([^/]+)\/(edit|enrollment|preview)$/);

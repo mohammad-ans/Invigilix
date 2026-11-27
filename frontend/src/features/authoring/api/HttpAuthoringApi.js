@@ -52,6 +52,7 @@ export class HttpAuthoringApi {
   setItems(id, items) { return this.request("PUT", `/exams/${id}/items`, { json: { items } }); }
   publishExam(id) { return this.request("POST", `/exams/${id}/publish`); }
   previewExam(id) { return this.request("POST", `/exams/${id}/preview`); }
+  duplicateExam(id) { return this.request("POST", `/exams/${id}/duplicate`); }
 
   // Question bank (FR04)
   searchQuestions(filters = {}) { return this.request("GET", "/questions", { query: filters }); }

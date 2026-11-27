@@ -207,3 +207,14 @@ def test_openapi_contract_generates(api):
     assert {"/exams", "/exams/{exam_id}/publish", "/exams/{exam_id}/preview",
             "/exams/{exam_id}/enrollments/import", "/questions/{question_id}/versions",
             "/admin/accounts/import"} <= set(paths)
+
+
+def test_duplicate_endpoint(api):
+    exam_id = make_paper(api)
+    api.post(f"/exams/{exam_id}/publish", headers=as_("examiner"))
+    response = api.post(f"/exams/{exam_id}/duplicate", headers=as_("examiner"))
+    assert response.status_code == 201
+    body = response.json()
+    assert body["state"] == "draft" and body["title"] == "Copy of Field ecology"
+    assert len(body["items"]) == 2 and body["publication"]["ready"]
+    assert api.post(f"/exams/{exam_id}/duplicate", headers=as_("other")).status_code == 404

@@ -74,6 +74,11 @@ def build_router(module: AuthoringModule, current_actor: Callable[..., Actor]) -
     def publish_exam(exam_id: UUID, actor: Me):
         return ExamOut.of(module.exams.publish(actor, exam_id))
 
+    @router.post("/exams/{exam_id}/duplicate", response_model=ExamOut, status_code=201)
+    def duplicate_exam(exam_id: UUID, actor: Me):
+        """Copy particulars and pinned versions into a new draft. Rosters are not copied."""
+        return ExamOut.of(module.exams.duplicate(actor, exam_id))
+
     @router.post("/exams/{exam_id}/preview", response_model=SandboxOut)
     def preview_exam(exam_id: UUID, actor: Me):
         """SR03 sandbox: a candidate-shaped paper. Nothing is written."""

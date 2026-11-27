@@ -268,6 +268,14 @@ export class FixtureAuthoringApi {
       return this.#examOut(e);
     });
   }
+  duplicateExam(id) {
+    return this.#reply(() => {
+      const source = this.#own(this.exams, id, "Exam");
+      const copy = { ...clone(source), id: uuid(), title: `Copy of ${source.title}`.slice(0, 300), published_at: null };
+      this.exams.push(copy);
+      return this.#examOut(copy);
+    });
+  }
   previewExam(id) {
     return this.#reply(() => {
       const e = this.#examOut(this.#own(this.exams, id, "Exam"));

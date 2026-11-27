@@ -132,6 +132,18 @@ class Exam:
         self.published_at = now
         return report
 
+    def duplicate(self, new_id: UUID, owner_id: UUID) -> "Exam":
+        """A new draft with the same particulars and pinned versions.
+
+        Works from any state, so a frozen paper can seed next term's exam.
+        The copy keeps the exact versions; the editor offers re-pinning.
+        """
+        title = f"Copy of {self.details.title}"[:300]
+        details = ExamDetails(title, self.details.instructions, self.details.schedule,
+                              self.details.total_marks, self.details.shuffle_questions,
+                              self.details.shuffle_choices)
+        return Exam(new_id, owner_id, details, tuple(self.items))
+
     def _ensure_draft(self) -> None:
         if self.is_published:
             raise Conflict("exam_published",

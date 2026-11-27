@@ -19,6 +19,8 @@ const toDraft = items => items.map(i => ({
 /** /examiner/exams/:id/edit — draft editor and frozen-paper review (FR03–FR05). */
 export default function ExamEditor({ api, params, navigate }) {
   const exam = useResource(() => api.getExam(params.id), [api, params.id]);
+  const [copying, setCopying] = useState(false);
+  const copiedFrom = new URLSearchParams(window.location.search || window.location.hash.split("?")[1] || "").get("copied");
   const [items, setItems] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [detailsDirty, setDetailsDirty] = useState(false);
@@ -87,9 +89,15 @@ export default function ExamEditor({ api, params, navigate }) {
       details={<><StateBadge state={data.state} /><i />{formatWindow(data.opens_at, data.closes_at)}<i />{formatDuration(data.duration_minutes)}<i />{formatMarks(data.total_marks)} marks<ModeLabel mode={api.mode} /></>}
       aside={<div className="row au-head-actions">
         <button className="secondary" onClick={() => navigate(paths.enrollment(data.id))}>Roster</button>
+        <button className="secondary" disabled={copying} onClick={async () => {
+          setCopying(true);
+          try { const copy = await api.duplicateExam(data.id); navigate(paths.edit(copy.id) + "?copied=1"); }
+          finally { setCopying(false); }
+        }}>{copying ? "Copying…" : "Copy to new draft"}</button>
         <button className="secondary" onClick={() => navigate(paths.preview(data.id))}>Preview as candidate</button>
       </div>} />
 
+    {copiedFrom && !frozen && <Banner tone="ok" title="New draft copied">Particulars and pinned question versions were copied; the roster was not. Set a new window, then review any slot marked “v… available”.</Banner>}
     {justPublished && <Banner tone="ok" title="Published">The paper is frozen. Enrolled candidates can see its instructions now and start it when the window opens.</Banner>}
     {frozen ? <FrozenSeal publishedAt={data.published_at} itemCount={data.items.length} />
       : ledger.balanced || !items.length ? <Banner tone="info" title="Editable draft">Candidates cannot see this exam. Changes save to the draft until you publish.</Banner>

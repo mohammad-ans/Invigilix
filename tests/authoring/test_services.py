@@ -236,3 +236,30 @@ class TestExamRegister:
     def test_unknown_exam_is_not_found(self, world):
         with pytest.raises(NotFound):
             world.module.exams.overview(world.actor("examiner"), uuid4())
+
+
+class TestDuplicate:
+    """Copy to new draft: reuse a frozen paper without touching it."""
+
+    def test_copy_of_published_exam_is_an_editable_draft_with_same_pins(self, world):
+        exam_id, (q1, *_rest) = world.three_item_paper()
+        actor = world.actor("examiner")
+        world.module.roster.enroll(actor, exam_id, ["nora@example.test"])
+        world.module.exams.publish(actor, exam_id)
+        world.module.bank.revise(actor, q1.id, content("Revised after publication"))
+
+        copy = world.module.exams.duplicate(actor, exam_id)
+        original = world.module.exams.overview(actor, exam_id)
+        assert copy.exam.id != exam_id and copy.state is ExamState.DRAFT
+        assert copy.exam.details.title == "Copy of Field ecology"
+        assert [s.version.id for s in copy.slots] == [s.version.id for s in original.slots]
+        assert copy.slots[0].outdated
+        assert world.module.roster.roster(actor, copy.exam.id).entries == ()
+        assert original.exam.is_published and original.exam.details.title == "Field ecology"
+
+    def test_only_the_owner_may_copy(self, world):
+        exam_id, _ = world.three_item_paper()
+        with pytest.raises(NotFound):
+            world.module.exams.duplicate(world.actor("other"), exam_id)
+        with pytest.raises(Forbidden):
+            world.module.exams.duplicate(world.actor("nora"), exam_id)

@@ -96,6 +96,17 @@ class ExamService(AuthoringService):
             uow.commit()
             return view
 
+    def duplicate(self, actor: Actor, exam_id: UUID) -> ExamOverview:
+        """Start a new draft from an owned exam in any state. No roster is copied."""
+        self._require(actor, EXAMINER)
+        with self._uow() as uow:
+            source = self._owned_exam(uow, actor, exam_id)
+            copy = source.duplicate(self._ids(), actor.id)
+            uow.exams.add(copy)
+            view = self._overview(uow, copy)
+            uow.commit()
+            return view
+
     def publish(self, actor: Actor, exam_id: UUID) -> ExamOverview:
         """Validate under the exam lock, then freeze the paper (FR05)."""
         self._require(actor, EXAMINER)
