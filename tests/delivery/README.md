@@ -6,7 +6,7 @@ The candidate pages and API implement FR07–FR09, IN01–IN02, SR01, SR07 and S
 
 [Watch the candidate journey](media/candidate-demo.mp4). A candidate answers a question, reloads a written draft offline and reconnects after a second device changes the answer. The film follows the choice of draft through review and the server-issued receipt. It uses the React pages, FastAPI router and PostgreSQL with fictional exam data and a test session.
 
-The opening date and final receipt share an original guilloché engraving. The register plate turns into place over 760 ms, the question number advances over 235 ms, and the receipt stamp lands over 410 ms. The timer and response fields stay still. The system reduced-motion preference selects the finished layout immediately.
+Scroll through the register to move the exam counter and the calendar marker together. The engraved opening ticket turns as it leaves the page, and each review row inks its margin as it enters. Jump directly to a section with the keyboard. Reduced motion keeps the same navigation and date tracking with immediate, static updates.
 
 ## Platform integration
 
@@ -27,3 +27,9 @@ Run from the repository root. The Python tests use FastAPI, psycopg 3, and the F
 | AT04, AT11 | `node --test tests/delivery/browser.test.mjs` | Builds the real pages, serves a fixture API on loopback and drives Chromium through offline navigation, editing, recovery, submission and logout. Set `CHROME_PATH` to use installed Chrome and `DELIVERY_SCREENSHOTS` to capture desktop and 360 px screenshots. |
 
 The scope checker accepts the local branch name `work/delivery`. A PR opened from a remote branch named `work/delivery` uses that reservation directly. A PR opened from the previous remote name `feature/candidate-workspace` would need a maintainer-approved alias.
+
+## Candidate save rehearsal
+
+With the disposable PostgreSQL DSN set, run `PYTHONPATH=. python tests/delivery/rehearse_saves.py`. Fifty test accounts each save one written response over HTTP every five seconds for ten minutes. The harness checks every acknowledged revision, starts a fresh FastAPI process and reads every final response back as its owner.
+
+The November 27 local loopback run acknowledged 6,000 of 6,000 saves in 600.1 seconds. The 95th-percentile response was 139.9 ms against the 2-second SRS target. All 50 accounts recovered revision 120 and the expected answer after the restart. Deployment latency, shared authentication and examiner feed freshness belong to the full three-role rehearsal.

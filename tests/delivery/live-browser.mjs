@@ -97,6 +97,29 @@ try {
   await page.getByRole("heading", { name: "Final receipt" }).waitFor();
   assert.equal(await page.locator(".dv-reference").textContent(), receipt.attempt_id);
   assert.deepEqual(await (await owner.request.post(url + "/submit", json)).json(), receipt);
+
+  const shortSitting = await signedInContext(peerId, process.env.DELIVERY_PEER_COOKIE);
+  const expiringPage = await shortSitting.newPage();
+  await expiringPage.goto(origin + "/me/exams");
+  await expiringPage.getByRole("button", {name:"Start exam"}).click();
+  await expiringPage.waitForURL(/\/attempts\/[\da-f-]{36}$/);
+  const expiringUrl = expiringPage.url();
+  const shortPaper = await (await shortSitting.request.get(expiringUrl, json)).json();
+  const essay = shortPaper.items.find(item => item.kind === "written");
+  await expiringPage.getByRole("button", {name:`Question ${essay.display_no}, unanswered`}).click();
+  await expiringPage.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+  await shortSitting.setOffline(true);
+  await expiringPage.getByLabel("Your answer").fill("Local only before cutoff.");
+  await expiringPage.getByText("On this device", {exact:true}).waitFor();
+  await expiringPage.close();
+  await new Promise(resolve => setTimeout(resolve, Math.max(0, Date.parse(shortPaper.deadline_at) - Date.now()) + 500));
+  const reopened = await shortSitting.newPage();
+  await reopened.goto(expiringUrl);
+  await reopened.getByText("Time is up. Waiting for the server receipt.").waitFor();
+  await shortSitting.setOffline(false);
+  await reopened.getByRole("heading", {name:"Time expired"}).waitFor();
+  await reopened.getByText(`Unconfirmed local changes on question ${essay.display_no}.`, {exact:false}).waitFor();
+  assert.equal(await reopened.getByRole("button", {name:"Confirm submission"}).count(), 0);
   assert.deepEqual(errors, []);
 } finally {
   await browser.close();

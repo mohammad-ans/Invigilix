@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { PageHead } from "../../design/Folio.jsx";
 import Engraving from "./Engraving.jsx";
+import RegisterIndex from "./RegisterIndex.jsx";
 import { request } from "./api.js";
 
 const groups = ["available", "upcoming", "completed"];
@@ -23,7 +24,7 @@ const dateKey = (value) => {
   ].join("-");
 };
 
-function OpeningCalendar({ exams, selected, select }) {
+function OpeningCalendar({ exams, selected, select, readingDate }) {
   const counts = new Map();
   for (const exam of exams) {
     const key = dateKey(exam.opens_at);
@@ -34,19 +35,21 @@ function OpeningCalendar({ exams, selected, select }) {
   const [chosen, setChosen] = useState(null);
   const month = months.includes(chosen)
     ? chosen
-    : months.find((m) => m >= today.slice(0, 7)) || months.at(-1);
+    : readingDate?.slice(0, 7) || months.find((m) => m >= today.slice(0, 7)) || months.at(-1);
   const monthIndex = months.indexOf(month);
   const [year, number] = month.split("-").map(Number);
   const first = new Date(year, number - 1, 1);
   const days = new Date(year, number, 0).getDate();
   const offset = (first.getDay() + 6) % 7;
+  const cursor = readingDate?.startsWith(month + "-") ? offset + Number(readingDate.slice(-2)) - 1 : null;
   return (
-    <aside className="dv-calendar-index" aria-label="Filter exams by opening date">
+    <aside id="delivery-calendar" tabIndex={-1} className="dv-calendar-index" aria-label="Filter exams by opening date">
       <div className="dv-calendar-top">
         <span>Opening dates</span>
         <h2>{format(first, { month: "long", year: "numeric" })}</h2>
       </div>
-      <div className="dv-month-grid">
+      <div className="dv-month-grid" data-tracking={cursor !== null || undefined}
+        style={cursor === null ? undefined : { "--day-column": cursor % 7, "--day-row": 1 + Math.floor(cursor / 7) }}>
         {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
           <span className="dv-weekday" key={d}>
             {d}
@@ -78,8 +81,10 @@ function OpeningCalendar({ exams, selected, select }) {
           );
         })}
       </div>
+      {readingDate && <p className="dv-calendar-reading">In view <b>{format(readingDate + "T12:00:00", { ...day, weekday: "short" })}</b></p>}
       <div className="dv-calendar-actions">
-        <button className="quiet" onClick={() => select(null)} disabled={!selected}>
+        {selected && <a className="dv-filter-hop" href="#register-filter">View filtered exams</a>}
+        <button className="quiet" onClick={() => { setChosen(null); select(null); }} disabled={!selected && chosen === null}>
           All dates
         </button>
         {months.length > 1 && (
@@ -109,13 +114,13 @@ function OpeningCalendar({ exams, selected, select }) {
 
 function ExamEntry({ exam, entering, onEnter, featured }) {
   return (
-    <article className={"dv-entry" + (featured ? " dv-ticket" : "")}>
+    <article className={"dv-entry" + (featured ? " dv-ticket" : "")} data-exam-id={exam.id}>
       <time
         className="dv-calendar"
         dateTime={exam.opens_at}
         aria-label={format(exam.opens_at, { dateStyle: "long" })}
       >
-        {featured && <Engraving />}
+        {featured && <span className="dv-plate-bed"><Engraving /></span>}
         <span>{format(exam.opens_at, { month: featured ? "long" : "short" })}</span>
         <b>{format(exam.opens_at, { day: "2-digit" })}</b>
         <small>{format(exam.opens_at, { weekday: featured ? "long" : "short" })}</small>
@@ -156,6 +161,7 @@ export function CandidateExams({ navigate = navigateTo }) {
   const [error, setError] = useState("");
   const [entering, setEntering] = useState(null);
   const [selectedDate, selectDate] = useState(null);
+  const [readingId, setReadingId] = useState(null);
   const [version, retry] = useState(0);
   useEffect(() => {
     let active = true,
@@ -204,8 +210,14 @@ export function CandidateExams({ navigate = navigateTo }) {
       setEntering(null);
     }
   }
-  const listed = (exams ?? []).filter(e => !selectedDate || dateKey(e.opens_at) === selectedDate);
-  const featured = listed.find(e => e.status === "available") ?? listed.find(e => e.status === "upcoming");
+  const sections = useMemo(() => {
+    const listed = (exams ?? []).filter(e => !selectedDate || dateKey(e.opens_at) === selectedDate);
+    return groups.map(group => ({ group, entries: listed.filter(e => e.status === group) }))
+      .filter(section => section.entries.length);
+  }, [exams, selectedDate]);
+  const featured = sections.find(section => section.group !== "completed")?.entries[0];
+  const hasIndex = sections.length > 1 || (sections[0]?.entries.length ?? 0) > 1;
+  const readingExam = hasIndex && (exams.find(exam => exam.id === readingId) || sections[0].entries[0]);
   return (
     <main className="shell dv dv-register">
       <PageHead
@@ -221,6 +233,7 @@ export function CandidateExams({ navigate = navigateTo }) {
         aside={
           <span className="dv-zone">
             Schedule time zone <b>{Intl.DateTimeFormat().resolvedOptions().timeZone}</b>
+            {Boolean(exams?.length) && <a className="dv-filter-hop" href="#delivery-calendar">Opening dates</a>}
           </span>
         }
       />
@@ -245,39 +258,36 @@ export function CandidateExams({ navigate = navigateTo }) {
       )}
       {Boolean(exams?.length) && (
         <div className="dv-register-grid">
-          <div>
+          <div className="dv-register-leaves">
             {selectedDate && (
-              <p className="dv-filter" role="status">
+              <p id="register-filter" tabIndex={-1} className="dv-filter" role="status">
                 Opening {format(selectedDate + "T12:00:00", { dateStyle: "long" })}{" "}
                 <button className="quiet" onClick={() => selectDate(null)}>
                   Show all exams
                 </button>
               </p>
             )}
-            {groups.map((group) => {
-              const entries = listed.filter(e => e.status === group);
-              return (
-                entries?.length > 0 && (
-                  <section className={"dv-group dv-group-" + group} key={group}>
-                    <div className="dv-group-head">
-                      <h2>
-                        {group === "available"
-                          ? "Available now"
-                          : group === "upcoming"
-                            ? "Upcoming"
-                            : "Completed"}
-                      </h2>
-                      <span>{String(entries.length).padStart(2, "0")}</span>
-                    </div>
-                    {entries.map((exam) => (
-                      <ExamEntry key={exam.id} exam={exam} entering={entering} onEnter={enter} featured={exam === featured} />
-                    ))}
-                  </section>
-                )
-              );
-            })}
+            {hasIndex && <RegisterIndex sections={sections} onRead={setReadingId} />}
+            {sections.map(({ group, entries }) => (
+              <section className={"dv-group dv-group-" + group} key={group}>
+                <div className="dv-group-head">
+                  <h2 id={"register-" + group} tabIndex={-1}>
+                    {group === "available"
+                      ? "Available now"
+                      : group === "upcoming"
+                        ? "Upcoming"
+                        : "Completed"}
+                  </h2>
+                  <span>{String(entries.length).padStart(2, "0")}</span>
+                </div>
+                {entries.map((exam) => (
+                  <ExamEntry key={exam.id} exam={exam} entering={entering} onEnter={enter} featured={exam === featured} />
+                ))}
+              </section>
+            ))}
           </div>
-          <OpeningCalendar exams={exams} selected={selectedDate} select={selectDate} />
+          <OpeningCalendar exams={exams} selected={selectedDate} select={selectDate}
+            readingDate={readingExam ? dateKey(readingExam.opens_at) : null} />
         </div>
       )}
     </main>

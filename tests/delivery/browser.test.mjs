@@ -28,6 +28,11 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
      opens_at:new Date(Date.now()+86400000).toISOString(),closes_at:new Date(Date.now()+90000000).toISOString(),duration_seconds:3600,status:"upcoming"},
     {id:"prior",title:"Population dynamics",instructions:"",opens_at:new Date(Date.now()-86400000).toISOString(),
      closes_at:new Date(Date.now()-84000000).toISOString(),duration_seconds:2400,attempt_id:"prior-attempt",status:"completed"}];
+  ["Soil science", "Plant communities", "Conservation methods", "Wetland systems"].forEach((title, i) => {
+    const starts = Date.now() + (i + 2) * 86400000;
+    dashboard.push({...dashboard[1], id:"upcoming-" + i, title,
+      opens_at:new Date(starts).toISOString(), closes_at:new Date(starts + 3600000).toISOString()});
+  });
   const server = createServer(async(req,res)=>{
     const path = req.url;
     const send = (data,status=200) => { res.writeHead(status,{"Content-Type":"application/json"}); res.end(JSON.stringify(data)); };
@@ -82,12 +87,31 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   assert.equal(await animationName(plate), "dv-register-plate");
   await page.emulateMedia({reducedMotion:"reduce"});
   assert.equal(await animationName(plate), "none");
+  assert.equal(await animationName(page.locator(".dv-plate-bed")), "none");
   await page.emulateMedia({reducedMotion:"no-preference"});
   await shot("dashboard-desktop");
+  const bed = page.locator(".dv-plate-bed");
+  const initialTransform = await bed.evaluate(el => getComputedStyle(el).transform);
+  await page.locator(".dv-ticket").evaluate(el => scrollBy(0, el.getBoundingClientRect().top + el.offsetHeight / 2));
+  await page.waitForFunction(before => getComputedStyle(document.querySelector(".dv-plate-bed")).transform !== before,
+    initialTransform);
+  const register = page.getByRole("navigation", {name:"Exam register sections"});
+  await register.getByRole("link", {name:"Completed"}).focus();
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.activeElement.id === "register-completed" &&
+    document.querySelector('.dv-index-tabs [aria-current="location"]')?.textContent === "Completed");
+  assert.equal(await page.locator(".dv-calendar-reading b").textContent(),
+    await page.locator(".dv-group-completed time").evaluate(el =>
+      new Date(el.dateTime).toLocaleString(undefined, {month:"short",day:"numeric",weekday:"short"})));
+  await register.getByRole("link", {name:"Available"}).click();
+  await page.waitForFunction(() => document.activeElement.id === "register-available" &&
+    document.querySelector(".dv-counter")?.getAttribute("aria-label")?.startsWith("Exam 1 of "));
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.waitForFunction(() => document.querySelector('.dv-index-tabs [aria-current]')?.textContent === "Available");
   await page.getByRole("button", {name:/, 1 exam$/}).first().click();
   assert.equal(await page.locator(".dv-entry").count(),1);
   await page.getByRole("button",{name:"Show all exams"}).click();
-  assert.equal(await page.locator(".dv-entry").count(),3);
+  assert.equal(await page.locator(".dv-entry").count(),dashboard.length);
   await page.setViewportSize({width:360,height:800});
   await shot("dashboard-mobile");
   await page.getByRole("button",{name:"Resume attempt"}).click();
@@ -160,6 +184,17 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   }
   assert.equal(await localCount(device),0);
   await page.getByRole("button",{name:"Review answers",exact:true}).last().click();
+  const lastRow = page.locator(".dv-review-list li").last();
+  const marginTransform = () => lastRow.evaluate(el => getComputedStyle(el, "::after").transform);
+  assert.equal(await marginTransform(), "none");
+  await page.emulateMedia({reducedMotion:"no-preference"});
+  await page.evaluate(() => window.scrollTo(0,0));
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const startingMargin = await marginTransform();
+  await lastRow.evaluate(el => el.scrollIntoView({block:"start"}));
+  await page.waitForFunction(before => getComputedStyle(document.querySelector(".dv-review-list li:last-child"), "::after").transform !== before,
+    startingMargin);
+  await page.emulateMedia({reducedMotion:"reduce"});
   await page.getByRole("button",{name:"Confirm submission"}).click();
   await page.getByRole("heading",{name:"Final receipt"}).waitFor();
   assert.equal(await animationName(page.locator(".dv-imprint")),"none");

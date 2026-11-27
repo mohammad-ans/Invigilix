@@ -197,9 +197,16 @@ class DeliveryAPI(unittest.TestCase):
         import uvicorn
 
         self.clock.stop()
+        expiry_exam = uuid4()
         with self.connect() as db:
             db.execute("""UPDATE exam SET published_at=now()-interval '2 days',
                           opens_at=now()-interval '1 hour', closes_at=now()+interval '1 hour'""")
+            db.execute("""INSERT INTO exam SELECT %s,owner_id,'Short sitting',instructions,opens_at,closes_at,
+                          8,total_marks,shuffle_objective,shuffle_choices,published_at,NULL FROM exam WHERE id=%s""",
+                       (expiry_exam, self.exam))
+            db.execute("INSERT INTO exam_item SELECT %s,slot,version_id,max_marks FROM exam_item WHERE exam_id=%s",
+                       (expiry_exam, self.exam))
+            db.execute("INSERT INTO enrollment VALUES (%s,%s,%s,true)", (expiry_exam, self.other, self.other))
         sessions = {uuid4().hex: self.candidate, uuid4().hex: self.other}
         owner_cookie, peer_cookie = sessions
 
@@ -210,6 +217,8 @@ class DeliveryAPI(unittest.TestCase):
             return actor
 
         self.app.dependency_overrides[self.identity] = browser_identity
+        from backend.app.features.delivery.worker import expiry_worker
+        self.app.router.lifespan_context = lambda app: expiry_worker(self.connect, self.scorer, interval_seconds=.2)
         with TemporaryDirectory() as public, socket.socket() as listener:
             @self.app.middleware("http")
             async def candidate_shell(request: Request, call_next):
@@ -238,12 +247,19 @@ class DeliveryAPI(unittest.TestCase):
                 thread.join(timeout=10)
                 self.assertFalse(thread.is_alive(), "Live test HTTP server did not shut down")
         with self.connect() as db:
-            rows = db.execute("SELECT slot, answer_revision, written_answer, awarded_marks FROM attempt_item ORDER BY slot").fetchall()
+            rows = db.execute("""SELECT slot, answer_revision, written_answer, awarded_marks FROM attempt_item
+                                 WHERE exam_id=%s ORDER BY slot""", (self.exam,)).fetchall()
             self.assertEqual([row["answer_revision"] for row in rows], [1, 0, 2])
             self.assertEqual([row["awarded_marks"] for row in rows], [1, 0, None])
             self.assertEqual(rows[2]["written_answer"], "Saved after reconnecting.")
-            events = db.execute("SELECT kind FROM attempt_event ORDER BY recorded_at").fetchall()
+            events = db.execute("""SELECT kind FROM attempt_event e JOIN attempt a ON a.id=e.attempt_id
+                                   WHERE a.exam_id=%s ORDER BY recorded_at""", (self.exam,)).fetchall()
             self.assertEqual([row["kind"] for row in events], ["started", "submitted"])
+            expired = db.execute("""SELECT a.close_reason, i.answer_revision, i.written_answer, i.awarded_marks
+                                    FROM attempt a JOIN attempt_item i ON i.attempt_id=a.id
+                                    WHERE a.exam_id=%s AND i.slot=3""", (expiry_exam,)).fetchone()
+            self.assertEqual(expired, {"close_reason": "expired", "answer_revision": 0,
+                                      "written_answer": "", "awarded_marks": 0})
 
     def test_preferences_and_role(self):
         prefs = dict(font_percent=200, workspace_layout="focus")
