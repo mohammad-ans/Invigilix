@@ -5,7 +5,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../../../design/folio.css";
-import { FixtureAuthoringApi, authoringRoutes, matchRoute, paths } from "../index.js";
+import { CandidateImportPanel, FixtureAuthoringApi, authoringRoutes, matchRoute, paths } from "../index.js";
+import { PageHead } from "../../../design/Folio.jsx";
+
+const ADMIN_IMPORT = "/admin/accounts/import";
 
 const current = () => (window.location.hash.slice(1) || paths.exams);
 
@@ -21,7 +24,7 @@ function Harness() {
   const match = matchRoute(path);
   const route = authoringRoutes.find(r => r.name === match?.name);
   useEffect(() => { document.title = `${route?.title ?? "Not found"} · Folio`; }, [route]);
-  const section = match?.name === "questions" ? "questions" : "exams";
+  const section = path === ADMIN_IMPORT ? "admin" : match?.name === "questions" ? "questions" : "exams";
 
   return <>
     <header className="appbar"><div className="bar-inner">
@@ -29,9 +32,14 @@ function Harness() {
       <nav className="au-nav" aria-label="Authoring">
         <a href={"#" + paths.exams} aria-current={section === "exams" ? "page" : undefined}>Exams</a>
         <a href={"#" + paths.questions} aria-current={section === "questions" ? "page" : undefined}>Question bank</a>
+        <a href={"#" + ADMIN_IMPORT} aria-current={section === "admin" ? "page" : undefined}>Admin import</a>
       </nav>
     </div></header>
-    {route ? <route.Page key={path} api={api} params={match.params} navigate={navigate} />
+    {path === ADMIN_IMPORT ? <main className="shell au-page">
+        <PageHead crumb="Administration" title="Import candidates" details={<><b>Accounts</b><i />Embedded in the foundation's account page in production</>} />
+        <section className="board"><CandidateImportPanel api={api} /></section>
+      </main>
+    : route ? <route.Page key={path} api={api} params={match.params} navigate={navigate} />
       : <main className="shell"><h1>Page not found</h1><p><a href={"#" + paths.exams}>Return to the exam register</a></p></main>}
     <footer className="foot"><span>Folio · Authoring preview</span><span>Fictional records · session only</span></footer>
   </>;

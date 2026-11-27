@@ -80,3 +80,24 @@ test("copy to new draft keeps pins and leaves the frozen original alone", async 
   assert.equal(original.state, "scheduled");
   assert.equal((await a.getRoster(copy.id)).entries.length, 0);
 });
+
+test("AT10 / SR04: candidate import is atomic, issues credentials once, and reruns change nothing", async () => {
+  const a = api();
+  const bad = "email,display_name\nsana.ali@example.test,Sana Ali\nnot-an-email,X\nola.examiner@example.test,Ola\n";
+  const checked = await a.importCandidates(bad, { dryRun: true });
+  assert.deepEqual(checked.issues.map(i => [i.row, i.field, i.code]), [[3, "email", "invalid_email"], [4, "email", "email_in_use"]]);
+  assert.deepEqual(checked.credentials, []);
+  await rejects(a.importCandidates(bad), 422, "import_invalid");
+  const good = "email,display_name\nmaya.rossi@example.test,Maya Rossi\nnora.khan@example.test,Nora Khan\n";
+  const first = await a.importCandidates(good);
+  assert.deepEqual([first.created, first.unchanged, first.committed], [1, 1, true]);
+  assert.equal(first.credentials.length, 1);
+  assert.equal(first.credentials[0].email, "maya.rossi@example.test");
+  assert.ok(first.credentials[0].initial_password.length >= 16);
+  const rerun = await a.importCandidates(good);
+  assert.deepEqual([rerun.created, rerun.unchanged, rerun.credentials.length], [0, 2, 0]);
+  // The new candidate can now be enrolled (import feeds the roster).
+  const draft = (await a.listExams()).find(e => e.title === "Field ecology");
+  const roster = await a.enroll(draft.id, ["maya.rossi@example.test"]);
+  assert.ok(roster.entries.some(e => e.email === "maya.rossi@example.test" && e.active));
+});

@@ -72,4 +72,7 @@ export class HttpAuthoringApi extends AuthoringApi {
   enroll(id, emails) { return this.#request("POST", `/exams/${id}/enrollments`, { json: { candidate_emails: emails } }); }
   setEnrollment(id, candidateId, active) { return this.#request("PATCH", `/exams/${id}/enrollments/${candidateId}`, { json: { active } }); }
   importRoster(id, csv, { dryRun = false } = {}) { return this.#request("POST", `/exams/${id}/enrollments/import`, { csv, query: { dry_run: dryRun || undefined } }); }
+
+  // Candidate accounts (SR04)
+  importCandidates(csv, { dryRun = false } = {}) { return this.#request("POST", "/admin/accounts/import", { csv, query: { dry_run: dryRun || undefined } }); }
 }

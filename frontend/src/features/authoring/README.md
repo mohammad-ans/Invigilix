@@ -10,6 +10,8 @@
 
 Each page takes `{ api, params, navigate }`. Mount them from `authoringRoutes` in `index.js`.
 
+`CandidateImportPanel` (SR04, administrators) is not a route. The foundation's `/admin/accounts` page embeds it as its "admin import action". It shows a check-then-import flow, then a one-time sheet of initial passwords: masked until revealed, downloadable and copyable, and forgotten once the administrator confirms they are saved. In the preview harness it is under "Admin import".
+
 - **`HttpAuthoringApi`** (`mode: "live"`) calls the FastAPI router. The default prefix is `/api`, because `/me/exams` is both a page and an API path. Pass `csrfHeader` to match the platform's CSRF scheme.
 - **`FixtureAuthoringApi`** (`mode: "preview"`) runs on fictional records in memory, with the same response and error shapes. Pages that run on it show a "Preview data" label.
 

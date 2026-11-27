@@ -11,6 +11,12 @@ import {
 
 const uuid = () => (globalThis.crypto?.randomUUID?.() ?? "xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g, () => (Math.random() * 16 | 0).toString(16)));
 const clone = value => JSON.parse(JSON.stringify(value));
+// One-time preview credential, 16 URL-safe characters from the platform CSPRNG.
+const initialPassword = () => {
+  const bytes = new Uint8Array(12);
+  globalThis.crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_");
+};
 const fail = (status, code, message, issues = []) => { throw new ApiError(status, { error: { code, message, issues } }); };
 const invalid = (issues, message = "The request has invalid fields.", code = "validation_failed") => fail(422, code, message, issues);
 const marks = cents => centsToMarks(cents);
@@ -214,7 +220,13 @@ export class FixtureAuthoringApi extends AuthoringApi {
       if (!dryRun) invalid(issues, "No rows were imported. Fix the listed rows and import the file again.", "import_invalid");
       return report;
     }
-    if (!dryRun) { plans.forEach(p => p.apply?.()); report.committed = true; }
+    if (!dryRun) {
+      for (const p of plans) {
+        const outcome = p.apply?.();
+        if (outcome?.credential) report.credentials.push(outcome.credential);
+      }
+      report.committed = true;
+    }
     return report;
   }
 
@@ -364,6 +376,24 @@ export class FixtureAuthoringApi extends AuthoringApi {
       return this.#rosterOut(e);
     });
   }
+  importCandidates(csvText, { dryRun = false } = {}) {
+    // The preview examiner also acts as administrator here; the live API enforces the admin role.
+    return this.#reply(() => this.#runImport(csvText, ["email", "display_name"], [], values => {
+      const email = values.email, name = values.display_name, issues = [];
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) issues.push({ code: "invalid_email", message: "Enter a valid email address.", field: "email" });
+      if (!name) issues.push({ code: "required", message: "Enter a display name.", field: "display_name" });
+      if (issues.length) invalid(issues);
+      const key = email.toLowerCase();
+      const existing = this.accounts.find(a => a.email.toLowerCase() === key);
+      if (existing && !existing.roles.includes("candidate")) invalid([{ code: "email_in_use", message: "This email belongs to a non-candidate account.", field: "email" }]);
+      if (existing) return { key, keyField: "email", action: "unchanged" };
+      return { key, keyField: "email", action: "created", apply: () => {
+        this.accounts.push({ id: uuid(), email, display_name: name, roles: ["candidate"], enabled: true });
+        return { credential: { email, initial_password: initialPassword() } };
+      } };
+    }, dryRun));
+  }
+
   importRoster(id, csvText, { dryRun = false } = {}) {
     return this.#reply(() => {
       const e = this.#own(this.exams, id, "Exam");
