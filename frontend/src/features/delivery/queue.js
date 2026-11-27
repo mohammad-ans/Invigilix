@@ -16,7 +16,14 @@ export function enqueue(record, observed, body, id) {
   const item = record.paper.items.find(i => i.slot === observed.slot);
   const revision = observed.pendingId && item.ackId === observed.pendingId
     ? item.revision : observed.revision;
-  record.pending.push({ id, slot: observed.slot, base_revision: revision, parent: parent?.id, body });
+  // Replace only our direct, unsent leaf. Another tab may have dispatched the
+  // parent or created a competing edit since this component last rendered it.
+  if (parent?.dispatched === false && !record.pending.some(edit => edit.parent === parent.id)) {
+    parent.id = id;
+    parent.body = body;
+    return;
+  }
+  record.pending.push({ id, slot: observed.slot, base_revision: revision, parent: parent?.id, dispatched: false, body });
 }
 
 export function accept(record, edit, ack) {

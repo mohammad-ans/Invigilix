@@ -6,11 +6,12 @@ const offlineError = error => !error.status || error.status >= 500;
 const denied = error => [401, 403, 404].includes(error.status);
 
 export class AttemptSession {
-  constructor(account, id, notify) {
+  constructor(account, id, notify, storage = change) {
     this.account = account;
     this.id = id;
     this.path = "/attempts/" + encodeURIComponent(id);
     this.notify = notify;
+    this.storage = storage;
     this.writes = Promise.resolve();
     this.optimistic = [];
     this.state = { status: "Loading" };
@@ -32,7 +33,7 @@ export class AttemptSession {
       if (!this.active) return;
       if (!this.memoryOnly) {
         try {
-          this.record = await change(this.account, this.id, update);
+          this.record = await this.storage(this.account, this.id, update);
         } catch {
           this.memoryOnly = true;
         }
@@ -47,19 +48,21 @@ export class AttemptSession {
 
   async init() {
     this.active = true;
-    await this.mutate(value => value);
     await this.refresh();
   }
 
   async refresh() {
-    if (this.refreshing || !this.active || this.state.receipt) return;
+    if (this.refreshing || !this.active || this.closed || this.state.denied) return;
     this.refreshing = true;
     try {
       const paper = await request(this.path);
       if (!this.active || this.closed || this.state.denied) return;
+      this.examTitle = paper.title;
       if (paper.finalized_at) return await this.close(paper);
       const offset = Date.parse(paper.server_time) - Date.now();
+      this.clock = { instant: Date.parse(paper.server_time), anchor: performance.now() };
       await this.mutate(old => {
+        if (this.closed || this.state.denied) return old;
         // Keep an acknowledgment that raced with this read.
         for (const item of paper.items) {
           const cached = old?.paper.items.find(i => i.slot === item.slot);
@@ -68,9 +71,13 @@ export class AttemptSession {
         return { paper, offset, pending: old?.pending ?? [], conflicts: old?.conflicts ?? {},
           scratch: old?.scratch ?? "" };
       });
+      if (!this.active || this.closed || this.state.denied || !this.record) return;
       this.show({ error: "", status: this.record.pending.length ? "Saving" : "Saved on server" });
       await this.flush();
     } catch (error) {
+      if (!this.active || this.closed || this.state.denied) return;
+      // Only expose a cached paper when the server cannot answer an access check.
+      if (!this.record && offlineError(error)) await this.mutate(value => value);
       await this.failure(error);
     } finally {
       this.refreshing = false;
@@ -83,8 +90,10 @@ export class AttemptSession {
       await this.mutate(() => undefined);
       this.show({ error: "Access to this attempt has ended.", denied: true });
     } else {
-      this.show({ error: offlineError(error) ? "Connection unavailable. Retry when connected." : error.message,
-        status: navigator.onLine ? "Save failed" : "On this device" });
+      const pending = this.record?.pending.length;
+      const status = offlineError(error) && pending && !this.memoryOnly ? "On this device"
+        : this.record && !pending ? "Saved on server" : "Save failed";
+      this.show({ error: offlineError(error) ? "Connection unavailable. Retry when connected." : error.message, status });
     }
   }
 
@@ -100,7 +109,10 @@ export class AttemptSession {
   }
 
   timeLeft() {
-    return this.record ? Date.parse(this.record.paper.deadline_at) - Date.now() - this.record.offset : 0;
+    if (!this.record) return 0;
+    const serverNow = this.clock ? this.clock.instant + (performance.now() - this.clock.anchor)
+      : Date.now() + this.record.offset;
+    return Date.parse(this.record.paper.deadline_at) - serverNow;
   }
 
   flush() {
@@ -113,15 +125,25 @@ export class AttemptSession {
       await this.writes;
       const record = this.record;
       if (!record) return;
-      const edit = record.pending.find(e => !record.conflicts[e.slot]);
-      if (!edit) {
+      const hasSendable = record.pending.some(e => !record.conflicts[e.slot]);
+      if (!hasSendable) {
         this.show({ status: record.pending.length ? "Conflict" : "Saved on server" });
         return;
       }
-      if (!navigator.onLine || this.timeLeft() <= 0) {
+      if (navigator.onLine === false || this.timeLeft() <= 0) {
         this.show({ status: "On this device" });
         return;
       }
+      let edit;
+      // Claim the current value in the same shared transaction used by enqueue.
+      // Once sent, its body must remain identical for lost-acknowledgment replay.
+      await this.mutate(current => {
+        edit = current?.pending.find(e => !current.conflicts[e.slot]);
+        if (edit) edit.dispatched = true;
+        return current;
+      });
+      if (!edit) continue;
+      if (!this.active || this.closed || this.state.denied) return;
       this.show({ status: "Saving" });
       try {
         const ack = await request(this.path + "/items/" + edit.slot, "PUT",
@@ -170,12 +192,22 @@ export class AttemptSession {
     }
   }
 
-  async submit() {
-    if (this.closed || this.state.submitting) return;
-    this.show({ submitting: true });
+  async submit({ acceptedOnly = false } = {}) {
+    if (!this.active || this.closed || this.state.submitting || this.state.denied) return;
+    this.show({ submitting: true, submitBlocked: false });
     try {
-      await this.flush();
-      if (!this.record || this.record.pending.length || this.closed) return;
+      await this.writes;
+      if (acceptedOnly) {
+        // Wait for any in-flight save before posting the terminal transition.
+        if (this.sending) await this.sending;
+      } else {
+        await this.flush();
+      }
+      if (!this.record || this.closed) return;
+      if (this.record.pending.length && !acceptedOnly) {
+        this.show({ submitBlocked: true });
+        return;
+      }
       await this.close(await request(this.path + "/submit", "POST"));
     } catch (error) {
       await this.failure(error);
@@ -199,10 +231,10 @@ export class AttemptSession {
         if (item.kind === "written") return item.written_answer !== edit.body.written_answer;
         const ids = edit.body.selected_option_ids;
         return ids.length !== item.selected_option_ids.length || !ids.every(id => item.selected_option_ids.includes(id));
-      }).map(edit => edit.slot);
+      }).map(edit => record.paper.items.find(item => item.slot === edit.slot).display_no).sort((a,b) => a-b);
       return undefined;
     });
     const { attempt_id, finalized_at, close_reason } = receipt;
-    this.show({ receipt: { attempt_id, finalized_at, close_reason }, outstanding, error: "" });
+    this.show({ receipt: { attempt_id, finalized_at, close_reason }, outstanding, title: this.examTitle, error: "" });
   }
 }

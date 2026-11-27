@@ -2,15 +2,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, readdir, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, extname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { build } from "vite";
+import { buildCandidateShell } from "./browser/build.mjs";
 
-const source = fileURLToPath(new URL("./browser", import.meta.url));
-const worker = new URL("../../frontend/src/features/delivery/offline-shell.js", import.meta.url);
 const common = { flagged:false, revision:0, selected_option_ids:[], written_answer:"", max_marks:2 };
 const items = [
   {kind:"single",prompt:"Which measurement estimates species richness?", options:["Number of species","Population density","Mean canopy height"]},
@@ -21,13 +18,16 @@ const items = [
 test("dashboard, offline reload, replay, conflict, account preferences and local cleanup", async t => {
   const out = await mkdtemp(join(tmpdir(),"folio-delivery-"));
   t.after(()=>rm(out,{recursive:true,force:true}));
-  await build({root:source,logLevel:"warn",build:{outDir:out,emptyOutDir:true}});
-  const assets = (await readdir(join(out,"assets"))).map(f=>"/assets/"+f);
+  const assets = await buildCandidateShell(out);
   let receipt;
   let prefs = {font_percent:100, workspace_layout:"standard"};
   const deadline = new Date(Date.now()+1800000).toISOString();
   const dashboard = [{id:"exam",title:"Field ecology",instructions:"Review every response before submitting.",
-    opens_at:new Date().toISOString(),closes_at:deadline,attempt_id:"sample",status:"available"}];
+    opens_at:new Date().toISOString(),closes_at:deadline,deadline_at:deadline,duration_seconds:1800,attempt_id:"sample",status:"available"},
+    {id:"next",title:"Conservation genetics",instructions:"Read the population study before answering.",
+     opens_at:new Date(Date.now()+86400000).toISOString(),closes_at:new Date(Date.now()+90000000).toISOString(),duration_seconds:3600,status:"upcoming"},
+    {id:"prior",title:"Population dynamics",instructions:"",opens_at:new Date(Date.now()-86400000).toISOString(),
+     closes_at:new Date(Date.now()-84000000).toISOString(),duration_seconds:2400,attempt_id:"prior-attempt",status:"completed"}];
   const server = createServer(async(req,res)=>{
     const path = req.url;
     const send = (data,status=200) => { res.writeHead(status,{"Content-Type":"application/json"}); res.end(JSON.stringify(data)); };
@@ -40,8 +40,7 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
     }
     if (path==="/sw.js") {
       res.writeHead(200,{"Content-Type":"application/javascript"});
-      return res.end(await readFile(worker,"utf8") + "\ninstallDeliveryShell(self," +
-        JSON.stringify({version:"fixture",shell:"/shell.html",assets})+");");
+      return res.end(await readFile(join(out,"sw.js")));
     }
     if(path==="/me/exams") return send(dashboard);
     if(path==="/attempts/sample" || path==="/exams/exam/attempts") return send({
@@ -79,6 +78,10 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   await page.goto(origin+"/me/exams");
   await page.getByText("Field ecology").waitFor();
   await shot("dashboard-desktop");
+  await page.getByRole("button", {name:/, 1 exam$/}).first().click();
+  assert.equal(await page.locator(".dv-entry").count(),1);
+  await page.getByRole("button",{name:"Show all exams"}).click();
+  assert.equal(await page.locator(".dv-entry").count(),3);
   await page.setViewportSize({width:360,height:800});
   await shot("dashboard-mobile");
   await page.getByRole("button",{name:"Resume attempt"}).click();
@@ -105,7 +108,8 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   await page.getByLabel("Your answer").fill("My offline draft");
   await page.getByText("On this device",{exact:true}).waitFor();
   await page.reload();
-  await page.getByRole("button",{name:"Question 3, answered"}).click();
+  await page.getByLabel("Your answer").waitFor();
+  assert.equal(await page.getByRole("button",{name:"Question 3, answered"}).getAttribute("aria-current"),"step");
   assert.equal(await page.getByLabel("Your answer").inputValue(),"My offline draft");
   await page.getByText("Scratchpad",{exact:true}).click();
   assert.equal(await page.getByLabel("Private rough work").inputValue(),"Private note");
@@ -117,7 +121,9 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   await page.getByRole("button",{name:"Keep my draft"}).click();
   await page.getByText("Saved on server",{exact:true}).waitFor();
   assert.equal(items[2].written_answer,"My offline draft");
-  const device=await browser.newPage();
+  const replacement = await chromium.launch({executablePath:process.env.CHROME_PATH || undefined});
+  t.after(()=>replacement.close());
+  const device=await replacement.newPage();
   await device.goto(origin+"/attempts/sample");
   await device.waitForSelector("main.focus");
   await device.getByText("Scratchpad",{exact:true}).click();
@@ -136,4 +142,5 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   await page.getByRole("button",{name:"Confirm submission"}).click();
   await page.getByRole("heading",{name:"Final receipt"}).waitFor();
   assert.equal(await localCount(page),0);
+  await shot("receipt-mobile");
 });
