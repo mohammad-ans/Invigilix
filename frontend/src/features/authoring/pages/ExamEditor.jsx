@@ -2,15 +2,17 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PageHead, SaveStatus } from "../../../design/Folio.jsx";
 import { paths } from "../paths.js";
 import { useResource } from "../hooks.js";
-import { groupIssues, parseMarks, tally } from "../domain/rules.js";
+import { centsToMarks, groupIssues, parseMarks, tally } from "../domain/rules.js";
 import { RULE, formatDate, formatDuration, formatMarks, formatWindow, two } from "../domain/format.js";
-import { Checklist, Dialog, FrozenSeal, MarkLedger } from "../components/instruments.jsx";
+import { BalanceFixes, Checklist, Dialog, FrozenSeal, MarkLedger } from "../components/instruments.jsx";
+import { detailsBody } from "../api/AuthoringApi.js";
 import { ExamForm } from "../components/ExamForm.jsx";
 import {
   Banner, DifficultyScale, ErrorSummary, KindTag, Loading, LoadError, ModeLabel, StateBadge, VersionTag,
 } from "../components/primitives.jsx";
 import { BankPicker } from "../components/BankPicker.jsx";
 import { PaperProfile, WindowTimeline } from "../components/insights.jsx";
+import { ProofSheet, useProofPrint } from "../components/ProofSheet.jsx";
 
 const toDraft = items => items.map(i => ({
   question_id: i.question_id, version_id: i.version.id, max_marks: i.max_marks, version: i.version,
@@ -21,6 +23,7 @@ const toDraft = items => items.map(i => ({
 export default function ExamEditor({ api, params, navigate }) {
   const exam = useResource(() => api.getExam(params.id), [api, params.id]);
   const [copying, setCopying] = useState(false);
+  const [printing, printProof] = useProofPrint();
   const copiedFrom = new URLSearchParams(window.location.search || window.location.hash.split("?")[1] || "").get("copied");
   const [items, setItems] = useState(null);
   const [dirty, setDirty] = useState(false);
@@ -54,6 +57,16 @@ export default function ExamEditor({ api, params, navigate }) {
     setSaveState({ state: "pending", text: "Saving" });
     try { exam.replace(await api.updateExam(data.id, details)); setSaveState({ state: "saved", text: "Particulars saved on server" }); }
     catch (e) { setSaveState({ state: "error", text: "Save failed" }); throw e; }
+  }
+
+  async function setDeclaredTotal(cents) {
+    setSaveState({ state: "pending", text: "Saving" });
+    try {
+      exam.replace(await api.updateExam(data.id, detailsBody(data, { total_marks: centsToMarks(cents) })));
+      setSaveState({ state: "saved", text: `Declared total set to ${centsToMarks(cents)}` });
+    } catch {
+      setSaveState({ state: "error", text: "Save failed" });
+    }
   }
 
   async function savePaper() {
@@ -100,10 +113,14 @@ export default function ExamEditor({ api, params, navigate }) {
 
     {copiedFrom && !frozen && <Banner tone="ok" title="New draft copied">Particulars and pinned question versions were copied; the roster was not. Set a new window, then re-pin any slot whose bank question now has a newer version.</Banner>}
     {justPublished && <Banner tone="ok" title="Published">The paper is frozen. Enrolled candidates can see its instructions now and start it when the window opens.</Banner>}
-    {frozen ? <FrozenSeal publishedAt={data.published_at} itemCount={data.items.length} />
+    {frozen ? <FrozenSeal publishedAt={data.published_at} itemCount={data.items.length} fresh={justPublished} />
       : ledger.balanced || !items.length ? <Banner tone="info" title="Editable draft">Candidates cannot see this exam. Changes save to the draft until you publish.</Banner>
       : <Banner tone="error" mark="≠" title="Marks do not add up">
-          Slots allocate {formatMarks(ledger.allocated / 100)} of the declared {formatMarks(ledger.declared / 100)}. Adjust a slot’s marks or the declared total before publishing.
+          Slots allocate {formatMarks(ledger.allocated / 100)} of the declared {formatMarks(ledger.declared / 100)}. Pick a fix, or edit a slot’s marks yourself.
+          <BalanceFixes slots={slots} totalMarks={data.total_marks}
+            totalBlockedReason={detailsDirty ? "Save or discard the particulars you are editing first." : null}
+            onSetTotal={setDeclaredTotal}
+            onAdjustSlot={(slot, cents) => edit(items.map((x, n) => n === slot - 1 ? { ...x, max_marks: centsToMarks(cents) } : x))} />
         </Banner>}
 
     <div className="workgrid au-editor">
@@ -163,7 +180,7 @@ export default function ExamEditor({ api, params, navigate }) {
             <div><dt>Duration</dt><dd>{formatDuration(data.duration_minutes)} per attempt, capped at closing</dd></div>
             <div><dt>Declared total</dt><dd className="au-mono">{formatMarks(data.total_marks)}</dd></div>
             <div><dt>Shuffle</dt><dd>{[data.shuffle_questions && "Question order", data.shuffle_choices && "Choice order"].filter(Boolean).join(" · ") || "None"}</dd></div>
-          </dl> : <ExamForm key={data.id} initial={data} submitLabel="Save particulars" onSubmit={saveParticulars} onDirty={setDetailsDirty} />}
+          </dl> : <ExamForm key={`${data.id}:${data.total_marks}`} initial={data} submitLabel="Save particulars" onSubmit={saveParticulars} onDirty={setDetailsDirty} />}
         </article>
       </div>
 
@@ -171,6 +188,16 @@ export default function ExamEditor({ api, params, navigate }) {
         <section className="side">
           <div className="side-head"><h2>Allocation</h2></div>
           <div className="side-content"><MarkLedger items={slots} totalMarks={data.total_marks} /></div>
+        </section>
+        <section className="side au-proofcard">
+          <div className="side-content">
+            <h3 className="au-subhead">Proof sheet</h3>
+            <p className="au-sub">Print the paper as candidates will read it, for proof-reading on paper. The key version adds the mark scheme.</p>
+            <div className="row au-proofcard__actions">
+              <button type="button" className="secondary" disabled={!data.items.length} onClick={() => printProof(false)}>Print proof</button>
+              <button type="button" className="quiet" disabled={!data.items.length} onClick={() => printProof(true)}>Print with key</button>
+            </div>
+          </div>
         </section>
         <section className="side">
           <details className="au-profile-card" open>
@@ -196,6 +223,7 @@ export default function ExamEditor({ api, params, navigate }) {
     {picking && <BankPicker api={api} onClose={() => setPicking(false)} exclude={new Set(items.map(i => i.question_id))}
       onPick={question => { edit([...items, { question_id: question.id, version_id: question.latest.id, version: question.latest, latest_version_number: question.version_count, max_marks: "1.00" }]); }} />}
 
+    {printing !== null && <ProofSheet exam={data} withKey={printing} />}
     {confirming && <Dialog title="Publish this paper?" onClose={() => setConfirming(false)}>
       <ErrorSummary error={publishError} title="The server refused publication" describe={i => <>{i.item ? <b>Slot {two(i.item)} · </b> : null}{i.message}</>} />
       <p>Publishing freezes <b>{data.items.length} slots</b>, their question versions, <b>{formatMarks(data.total_marks)} marks</b>, the window and shuffle settings. Enrolled candidates will see the title and instructions.</p>

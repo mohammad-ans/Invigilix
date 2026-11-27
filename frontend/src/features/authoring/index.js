@@ -14,6 +14,7 @@ import RosterPage from "./pages/RosterPage.jsx";
 import PreviewPage from "./pages/PreviewPage.jsx";
 
 export { ExamRegister, ExamEditor, QuestionBank, RosterPage, PreviewPage };
+export { AuthoringApi, AUTHORING_API_METHODS } from "./api/AuthoringApi.js";
 export { HttpAuthoringApi, ApiError } from "./api/HttpAuthoringApi.js";
 export { FixtureAuthoringApi } from "./api/FixtureAuthoringApi.js";
 export { paths, matchRoute } from "./paths.js";

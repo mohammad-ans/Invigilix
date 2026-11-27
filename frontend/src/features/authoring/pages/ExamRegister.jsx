@@ -5,6 +5,9 @@ import { useResource } from "../hooks.js";
 import { formatDuration, formatMarks, formatWindow, two, STATE } from "../domain/format.js";
 import { Dialog } from "../components/instruments.jsx";
 import { ExamForm, blankDetails } from "../components/ExamForm.jsx";
+import { LedgerArt } from "../components/illustrations.jsx";
+import { ExamTimetable } from "../components/insights.jsx";
+import { InTray } from "../components/InTray.jsx";
 import { EmptyState, Loading, LoadError, ModeLabel, StateBadge, Stat } from "../components/primitives.jsx";
 
 const FILTERS = ["all", "draft", "scheduled", "ongoing", "completed"];
@@ -35,12 +38,15 @@ export default function ExamRegister({ api, navigate }) {
         {FILTERS.slice(1).map(s => <Stat key={s} label={STATE[s].label} value={two(counts[s])} />)}
       </div>
 
+      {counts.all > 0 && <InTray exams={exams.data} navigate={navigate} />}
+      {counts.all > 0 && <ExamTimetable exams={exams.data} onOpen={e => navigate(paths.edit(e.id))} />}
+
       <div className="au-filters" role="group" aria-label="Show exams by state">
         {FILTERS.map(f => <button key={f} type="button" className="au-chip" aria-pressed={filter === f} onClick={() => setFilter(f)}>
           {f === "all" ? "All" : STATE[f].label}<span className="au-chip__count">{counts[f]}</span></button>)}
       </div>
 
-      {counts.all === 0 && <EmptyState title="No exams on record yet"
+      {counts.all === 0 && <EmptyState art={<LedgerArt />} title="No exams on record yet"
         action={<button className="primary" onClick={() => setCreating(true)}>Start a draft</button>}>
         A draft holds the title, window, duration and declared total. Add questions from your bank, then publish.
       </EmptyState>}

@@ -15,6 +15,16 @@ Each page takes `{ api, params, navigate }`. Mount them from `authoringRoutes` i
 
 To review without a backend, run `npm run dev` and open `/src/features/authoring/demo/index.html`.
 
+## Built from persona walkthroughs
+
+Each feature below answers a step where a scripted persona walkthrough stalled. The walkthroughs drive the preview harness and count user actions.
+
+| Persona task | Before | After |
+| --- | --- | --- |
+| Examiner fixes a paper that allocates 12 of 20 marks, then publishes | 5 actions; the total field is below the fold | 4 actions; the fixes sit in the message that reports the problem |
+| Examiner pastes three emails, one mistyped | Refused after submitting; retype; 4 actions | Flagged while typing; valid ones enrolled; the typo is kept to fix; 2 actions |
+| Examiner asks which exams need them | Open up to 5 exams one by one | The in-tray answers on the register |
+
 ## Design notes
 
 The pages use the Folio tokens and classes (`folio.css`) and `PageHead` / `SaveStatus` from `Folio.jsx`. Feature styles live in `authoring.css` under an `au-` prefix:
@@ -25,6 +35,9 @@ The pages use the Folio tokens and classes (`folio.css`) and `PageHead` / `SaveS
 - **Window timeline:** the exam window as a ruler. The solid stretch is when a start still gets the full duration; the hatched stretch is when a start is cut short at closing (FR07's deadline rule). It shows the last full-length start time and updates live in the particulars form.
 - **Paper profile:** the share of marks by difficulty, question type and topic, plus how many marks score automatically versus wait for an examiner. It follows unsaved slot edits.
 - **Version comparison:** in the bank history, each revision opens a proof-reader's diff against the one before it: struck and inserted words in the prompt, changed particulars, and option or key moves matched by option ID.
+- **Exam timetable:** the register shows the next fortnight as ruled day columns, with weekends shaded and a red "now" line. Each exam window is a bar in its state's style and links to the exam.
+- **Galley proof:** a print-only A4 exam paper. "Print with key" adds the mark scheme and a Confidential watermark.
+- **Ink details:** empty states use line drawings (register, card drawer, in-tray). The frozen seal is an SVG rubber stamp that stamps down on publish, honouring reduced motion. The bank record reads as a catalogue card.
 - **Copy to new draft:** any exam, frozen or not, can seed a new draft with the same particulars and pinned versions. The roster is not copied.
 
 State is always shown with text and a glyph as well as colour. Tables become labelled cards below 640 px, and dialogs trap focus and restore it on close.

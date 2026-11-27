@@ -3,6 +3,8 @@ import { PageHead } from "../../../design/Folio.jsx";
 import { paths } from "../paths.js";
 import { useResource } from "../hooks.js";
 import { formatWindow, two } from "../domain/format.js";
+import { TrayArt } from "../components/illustrations.jsx";
+import { parseEmailList, usable } from "../domain/emails.js";
 import { ImportPanel } from "../components/ImportPanel.jsx";
 import {
   AccessBadge, Banner, EmptyState, ErrorSummary, Field, Loading, LoadError, ModeLabel, StateBadge, Stat,
@@ -28,7 +30,9 @@ export default function RosterPage({ api, params, navigate }) {
   const entries = roster.data.entries;
   const shown = entries.filter(e => `${e.display_name} ${e.email}`.toLowerCase().includes(query.trim().toLowerCase()));
   const active = entries.filter(e => e.active);
-  const list = emails.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+  const tokens = parseEmailList(emails);
+  const list = usable(tokens);
+  const flawed = tokens.filter(t => t.status === "malformed");
 
   async function enroll(e) {
     e.preventDefault();
@@ -37,9 +41,11 @@ export default function RosterPage({ api, params, navigate }) {
     try {
       const before = new Set(active.map(x => x.candidate_id));
       const next = await api.enroll(params.id, list);
-      roster.replace(next); setEmails("");
+      roster.replace(next);
+      setEmails(flawed.map(t => t.text).join("\n"));
       const added = next.entries.filter(x => x.active && !before.has(x.candidate_id)).length;
-      setNotice(`${added} ${added === 1 ? "candidate" : "candidates"} enrolled${list.length - added ? `; ${list.length - added} already on the roster` : ""}.`);
+      setNotice(`${added} ${added === 1 ? "candidate" : "candidates"} enrolled${list.length - added ? `; ${list.length - added} already on the roster` : ""}.`
+        + (flawed.length ? ` ${flawed.length} ${flawed.length === 1 ? "entry is" : "entries are"} left in the box to correct.` : ""));
     } catch (err) { setEnrollError(err.issues?.length ? err : { message: err.message, issues: [] }); }
     finally { setPending(false); }
   }
@@ -70,7 +76,7 @@ export default function RosterPage({ api, params, navigate }) {
           <Stat label="Blocked" value={two(entries.filter(e => BLOCKED.has(e.access)).length)} tone={entries.some(e => BLOCKED.has(e.access)) ? "warn" : undefined} />
         </div>
         {notice && <p className="au-notice" role="status">{notice}</p>}
-        {entries.length === 0 && <EmptyState title="No candidates enrolled">Add candidate emails or import a roster CSV. Only enabled accounts with the candidate role can be enrolled.</EmptyState>}
+        {entries.length === 0 && <EmptyState art={<TrayArt />} title="No candidates enrolled">Add candidate emails or import a roster CSV. Only enabled accounts with the candidate role can be enrolled.</EmptyState>}
         {entries.length > 0 && shown.length === 0 && <p className="au-none" role="status">No candidates match “{query}”.</p>}
         {shown.length > 0 && <table className="data-table au-stack">
           <caption className="sr-only">Roster for {exam.data.title}</caption>
@@ -93,9 +99,16 @@ export default function RosterPage({ api, params, navigate }) {
         <div className="side-content">
           {mode === "type" ? <form onSubmit={enroll} noValidate>
             <ErrorSummary error={enrollError} title="These entries could not be enrolled" describe={i => <>{i.row ? <b>{list[i.row - 1] ?? `Entry ${i.row}`} · </b> : null}{i.message}</>} />
-            <Field label="Candidate emails" hint="One per line, or separated by commas. Nothing is enrolled unless every entry is valid.">
+            <Field label="Candidate emails" hint="One per line, or separated by commas. Anything that is not an email stays here to fix. If an address has no enabled candidate account, nothing is enrolled.">
               <textarea rows={5} value={emails} onChange={e => setEmails(e.target.value)} placeholder="nora.khan@example.test" /></Field>
-            <button className="primary block" disabled={pending}>{pending ? "Enrolling…" : list.length > 1 ? `Enroll ${list.length} candidates` : "Enroll"}</button>
+            {tokens.length > 0 && <ul className="au-mailchips" aria-label="Emails read from your entry">
+              {tokens.map((t, i) => <li key={i} className={`au-mail-chip au-mail-chip--${t.status === "ok" ? "ok" : t.status === "malformed" ? "bad" : "repeat"}`}>
+                <span aria-hidden="true">{t.status === "ok" ? "✉" : t.status === "malformed" ? "✕" : "↺"}</span>{t.text}
+                {t.status !== "ok" && <em>{t.status === "malformed" ? "check format" : "repeated"}</em>}</li>)}
+            </ul>}
+            {flawed.length > 0 && <p className="au-sub au-warn" role="status">{flawed.length} {flawed.length === 1 ? "entry does" : "entries do"} not look like an email and will stay in the box for you to fix.</p>}
+            <button className="primary block" disabled={pending || (tokens.length > 0 && list.length === 0)}>
+              {pending ? "Enrolling…" : flawed.length && list.length ? `Enroll ${list.length} valid ${list.length === 1 ? "email" : "emails"}` : list.length > 1 ? `Enroll ${list.length} candidates` : "Enroll"}</button>
           </form>
             : <ImportPanel template="roster" noun="candidate" validate={text => api.importRoster(params.id, text, { dryRun: true })}
               commit={text => api.importRoster(params.id, text)} onImported={() => { roster.reload(); setNotice(null); }} />}

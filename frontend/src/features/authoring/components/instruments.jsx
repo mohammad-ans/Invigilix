@@ -1,5 +1,5 @@
-import React, { useRef } from "react";
-import { centsToMarks, tally } from "../domain/rules.js";
+import React, { useId, useRef } from "react";
+import { balanceOptions, centsToMarks, tally } from "../domain/rules.js";
 import { formatDate, two } from "../domain/format.js";
 import { useFocusTrap } from "../hooks.js";
 
@@ -33,6 +33,24 @@ export function MarkLedger({ items, totalMarks, compact = false }) {
   </figure>;
 }
 
+/**
+ * One-click remedies for a paper that does not add up, placed in the message
+ * that reports the problem. Declaring the allocated total saves at once; moving
+ * the gap onto a slot is a draft edit the examiner still saves.
+ */
+export function BalanceFixes({ slots, totalMarks, totalBlockedReason, onSetTotal, onAdjustSlot }) {
+  const options = balanceOptions(slots, totalMarks);
+  if (!options.length) return null;
+  return <div className="au-fixes" role="group" aria-label="Make the marks add up">
+    {options.map(o => o.kind === "set_total"
+      ? <button key="total" type="button" className="au-fix" disabled={Boolean(totalBlockedReason)} onClick={() => onSetTotal(o.cents)}>
+          Set declared total to <b>{centsToMarks(o.cents)}</b></button>
+      : <button key={`slot-${o.slot}`} type="button" className="au-fix" onClick={() => onAdjustSlot(o.slot, o.toCents)}>
+          Slot {two(o.slot)}: {centsToMarks(o.fromCents)} <span aria-hidden="true">→</span><span className="sr-only">to</span> <b>{centsToMarks(o.toCents)}</b></button>)}
+    {totalBlockedReason && <p className="au-sub">{totalBlockedReason}</p>}
+  </div>;
+}
+
 /** Publication checklist rendered like a proof-reader's margin. */
 export function Checklist({ publication, onJump }) {
   if (!publication) return null;
@@ -53,10 +71,37 @@ export function Checklist({ publication, onJump }) {
   </section>;
 }
 
+/** A rubber stamp: legend set around the ring, the mark and date in the
+ *  centre, edges roughened by a displacement filter so it reads as ink. */
+export function Stamp({ date, mark = "Frozen", legend = "Folio · Examination office · Frozen paper ·", className = "" }) {
+  const id = useId().replace(/:/g, "");
+  const day = new Date(date).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }).toUpperCase();
+  return <svg className={`au-stamp ${className}`} viewBox="0 0 120 120" aria-hidden="true">
+    <defs>
+      <path id={`${id}-ring`} d="M60 60m-43.5 0a43.5 43.5 0 1 1 87 0a43.5 43.5 0 1 1-87 0" />
+      <filter id={`${id}-ink`} x="-5%" y="-5%" width="110%" height="110%">
+        <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="7" result="n" />
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="1.8" />
+      </filter>
+    </defs>
+    <g filter={`url(#${id}-ink)`} fill="none" stroke="currentColor">
+      <circle cx="60" cy="60" r="56" strokeWidth="2.2" />
+      <circle cx="60" cy="60" r="51.5" strokeWidth=".8" />
+      <circle cx="60" cy="60" r="35" strokeWidth=".8" />
+      <text fill="currentColor" stroke="none" fontFamily="var(--mono)" fontSize="8" fontWeight="600" letterSpacing="1.4">
+        <textPath href={`#${id}-ring`} textLength="268" lengthAdjust="spacingAndGlyphs">{legend.toUpperCase()}</textPath>
+      </text>
+      <text x="60" y="61" textAnchor="middle" fill="currentColor" stroke="none" fontFamily="var(--serif)" fontStyle="italic" fontWeight="600" fontSize="17">{mark}</text>
+      <path d="M40 67h40" strokeWidth=".7" />
+      <text x="60" y="76" textAnchor="middle" fill="currentColor" stroke="none" fontFamily="var(--mono)" fontSize="6.4" letterSpacing=".6">{day}</text>
+    </g>
+  </svg>;
+}
+
 /** The stamped record of a frozen paper. */
-export function FrozenSeal({ publishedAt, itemCount }) {
-  return <div className="au-seal" role="note" aria-label="Published and frozen">
-    <div className="au-seal__stamp" aria-hidden="true"><span>Folio</span><b>Frozen</b><span>{new Date(publishedAt).getFullYear()}</span></div>
+export function FrozenSeal({ publishedAt, itemCount, fresh = false }) {
+  return <div className={`au-seal${fresh ? " au-seal--fresh" : ""}`} role="note" aria-label="Published and frozen">
+    <div className="au-seal__stamp"><Stamp date={publishedAt} /></div>
     <div className="au-seal__text">
       <strong>Published paper · frozen record</strong>
       <p>Published {formatDate(publishedAt, { withZone: true })}. The {itemCount} slots, their question versions, marks, schedule and settings can no longer change. Bank edits create new versions and leave this paper untouched.</p>

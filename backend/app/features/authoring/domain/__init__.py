@@ -5,10 +5,10 @@ from .exam import Exam, ExamDetails, ExamState, PaperItem
 from .paper import CandidateItem, CandidateOption, FrozenItem, FrozenPaper
 from .publication import AssignedVersion, Check, PublicationPolicy, PublicationReport
 from .question import AnswerOption, Question, QuestionContent, QuestionVersion
-from .values import Difficulty, ExamSchedule, MarkingRule, QuestionKind, parse_marks
+from .values import Change, Difficulty, ExamSchedule, MarkingRule, QuestionKind, parse_marks
 
 __all__ = [
-    "Access", "AccountRecord", "AnswerOption", "AssignedVersion", "AuthoringError",
+    "Access", "AccountRecord", "Change", "AnswerOption", "AssignedVersion", "AuthoringError",
     "CandidateItem", "CandidateOption", "Check", "Conflict", "Difficulty", "Enrollment",
     "EntryDecision", "EntryPolicy", "Exam", "ExamDetails", "ExamSchedule", "ExamState",
     "Forbidden", "FrozenItem", "FrozenPaper", "Issue", "MarkingRule", "NotFound", "PaperItem",
