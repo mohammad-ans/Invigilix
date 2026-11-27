@@ -396,3 +396,27 @@
 .res-slip__facts dt { font: 600 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .res-slip__facts dd { margin: 0; font: 14px var(--sans); }
 @media (max-width: 640px) { .res-slip { grid-template-columns: 1fr; } .res-slip__figure strong { font-size: 56px; } }
+
+/* time left (server clock) */
+.res-next-deadline { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; margin: 0 0 12px; padding: 8px 12px; border-left: 3px solid var(--forest); background: #f4f7ef; font-size: 14px; }
+.res-next-deadline--urgent { border-left-color: var(--rust); background: var(--rust-bg); }
+.res-timeleft--urgent { color: var(--rust); font-weight: 600; }
+.res-desk__time { font: 600 11px var(--mono); color: var(--forest); }
+.res-desk__time--urgent { color: var(--rust); }
+
+/* blind marking and progress */
+.res-marking-switches { flex-wrap: wrap; gap: 8px 18px; }
+.res-switch { display: inline-flex; align-items: center; gap: 8px; font: 600 13px var(--sans); cursor: pointer; }
+.res-switch input { appearance: none; width: 34px; height: 20px; border-radius: 10px; border: 1px solid #8d978b; background: var(--sheet); position: relative; cursor: pointer; margin: 0; }
+.res-switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #8d978b; transition: transform .15s ease; }
+.res-switch input:checked { background: var(--forest); border-color: var(--forest); }
+.res-switch input:checked::after { transform: translateX(14px); background: var(--sheet); }
+.res-switch input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .res-switch input::after { transition: none; } }
+.res-blind-note { margin: 6px 0 0; font-size: 13px; }
+.res-blind-id strong { font: 600 13px var(--mono); letter-spacing: .06em; color: var(--forest); }
+.res-marking-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule); font-size: 14px; }
+.res-marking-progress__rule { display: inline-flex; gap: 3px; flex: 1 1 120px; }
+.res-marking-progress__rule i { flex: 1; max-width: 42px; height: 10px; border: 1px solid #9ba697; background: var(--sheet); border-radius: 1px; }
+.res-marking-progress__rule i.on { background: var(--rust); border-color: var(--rust); }
+.res-hint { display: block; font-size: 12px; margin: 2px 0 6px; }

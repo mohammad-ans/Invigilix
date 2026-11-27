@@ -48,12 +48,31 @@ export function validateAnnouncementInput(raw) {
   return { value: cleaned };
 }
 
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+/**
+ * Read a verification code as a person typed it from paper: ignore spaces,
+ * hyphens and case; map look-alikes O→0, I/L→1. Returns the canonical
+ * grouped form (e.g. 7K2M-9QXD-…) or null if it cannot be a Folio code.
+ */
+export function normalizeVerificationCode(text) {
+  const symbols = String(text ?? "").replace(/[\s\-_.]+/g, "").toUpperCase().replace(/O/g, "0").replace(/[IL]/g, "1");
+  if (symbols.length !== 28 || [...symbols].some(c => !CROCKFORD.includes(c))) return null;
+  return symbols.match(/.{4}/g).join("-");
+}
+
+/** A digest as printed (grouped, any case) to 64 lowercase hex characters. */
+export const normalizeDigest = text => String(text ?? "").replace(/\s+/g, "").toLowerCase();
+
 export function validateVerifyInputs(verificationCode, sha256Hex) {
   const issues = [];
-  const code = String(verificationCode ?? "").trim();
-  const digest = String(sha256Hex ?? "").trim().toLowerCase();
-  if (!code) {
+  const typed = String(verificationCode ?? "").trim();
+  const code = normalizeVerificationCode(typed);
+  const digest = normalizeDigest(sha256Hex);
+  if (!typed) {
     issues.push({ code: "empty_code", message: "Enter the verification code printed on the report.", field: "verification_code" });
+  } else if (!code) {
+    issues.push({ code: "invalid_code", message: "A Folio code has 28 letters and digits, printed in groups of four.", field: "verification_code" });
   }
   if (!SHA256_HEX_RE.test(digest)) {
     issues.push({ code: "invalid_digest", message: "Provide a valid 64-character SHA-256 hex digest or choose a PDF file.", field: "sha256_hex" });

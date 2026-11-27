@@ -39,7 +39,7 @@ export function Stamp({ mark, legend, date, tone = "forest", className = "" }) {
  * filling as items are answered, status by word and shape as well as colour.
  * Reconnects show as a neutral observation tag, never as a warning.
  */
-export function SeatingPlan({ roster }) {
+export function SeatingPlan({ roster, timeLeft = () => null }) {
   return <div className="res-room">
     <div className="res-room__front" aria-hidden="true"><span>Invigilator · front of room</span></div>
     <ol className="res-seats" aria-label="Seating plan">
@@ -50,6 +50,7 @@ export function SeatingPlan({ roster }) {
           <strong className="res-desk__name">{r.display_name}</strong>
           <span className="res-desk__pips" aria-hidden="true">{pips(r.answered_count, r.total_items).map((on, n) => <i key={n} className={on ? "on" : ""} />)}</span>
           <span className="res-desk__state"><span aria-hidden="true">{meta.glyph} </span>{meta.label} · <span className="res-mono">{r.answered_count}/{r.total_items}</span></span>
+          {timeLeft(r) && <span className={`res-desk__time${timeLeft(r).urgent ? " res-desk__time--urgent" : ""}`}><span aria-hidden="true">⏱ </span>{timeLeft(r).text}</span>}
           {r.incident_count > 0 && <span className="res-desk__obs">{r.incident_count} observation{r.incident_count > 1 ? "s" : ""} · no penalty</span>}
         </li>;
       })}

@@ -43,6 +43,16 @@ app.include_router(build_router(results, current_actor), prefix="/api")
 | `GET /me/attempts/{id}/result` · `/report` | Own released score, or the exact issued PDF bytes | Candidate (404 until released) |
 | `POST /reports/verify` | `{verification_code, sha256_hex}` → `{valid}` only | Public |
 
+## Built from persona walkthroughs
+
+Scripted persona walkthroughs drive the preview harness, count actions and record outcomes.
+
+| Persona task | Before | After |
+| --- | --- | --- |
+| Verifier types the code and digest exactly as printed on the report | **Rejected** | Verified. `VerificationCode` (Crockford base-32, 140 bits, in groups of four) and `Sha256Digest` accept spaces, hyphens, case and look-alikes |
+| Invigilator asks who will run out of time first | Not answerable from the monitor | "Next to finish" line, a Time left column and time left on each desk, from the server clock (IN02) |
+| Examiner marks without seeing who wrote the script | Names always visible; no progress shown | Blind marking switch (scripts A, B, …; names and finish times hidden; ordered by label), progress rule and "Next unmarked" |
+
 ## Boundaries with other lanes
 
 - **Delivery** calls `score_finalized_item(kind, rule, max_marks, selected_ids=…, correct_ids=…, written_answer=…)` inside its finalization transaction. It returns `Decimal` marks, or `None` for a nonblank written answer awaiting an examiner. The keys come from authoring's frozen paper.

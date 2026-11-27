@@ -119,14 +119,17 @@ export default function VerifyPage({ api }) {
         <form onSubmit={handleVerify} noValidate>
           <div className="res-field">
             <label htmlFor="verify-code">Verification code</label>
+            <span className="res-muted res-hint" id="verify-code-hint">Copy it from the report as printed. Spaces, hyphens and lower case are fine.</span>
             <input
               id="verify-code"
               className="res-input res-mono"
               type="text"
-              placeholder="e.g. FOL-..."
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="e.g. 7K2M-9QXD-4HPR-…"
               value={code}
               aria-invalid={codeIssue ? true : undefined}
-              aria-describedby={codeIssue ? "verify-code-err" : undefined}
+              aria-describedby={codeIssue ? "verify-code-hint verify-code-err" : "verify-code-hint"}
               onChange={e => {
                 setCode(e.target.value);
                 if (status === "valid" || status === "invalid") setStatus("empty");
