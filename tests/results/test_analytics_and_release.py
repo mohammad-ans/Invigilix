@@ -219,3 +219,41 @@ def test_release_blockers_name_the_candidate_not_the_attempt_id():
         ("grading_incomplete", "Sana Ali · slot 3 still awaits a manual grade.", 3)]
     unnamed = release_blockers(exam, [attempt], {attempt.id: [item]}, now)
     assert unnamed[0].message.startswith(f"Attempt {attempt.id}")
+
+
+def test_score_register_is_one_source_for_screen_and_pdf():
+    """Finalized only, alphabetical, pending totals stay None (never silently zero)."""
+    import dataclasses
+    from datetime import datetime, timezone
+    from decimal import Decimal
+    from uuid import uuid4
+
+    from backend.app.features.results.domain import ScoreRegister
+    from backend.app.features.results.domain.values import AccountSummary, AttemptItemRecord, AttemptRecord
+
+    now = datetime(2026, 11, 27, 11, 0, tzinfo=timezone.utc)
+
+    def build(cls, **known):
+        return cls(**{f.name: known.get(f.name) for f in dataclasses.fields(cls)
+                      if f.name in known or (f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING)})
+
+    def attempt(final=True):
+        return build(AttemptRecord, id=uuid4(), exam_id=uuid4(), candidate_id=uuid4(), started_at=now,
+                     deadline_at=now, finalized_at=now if final else None, close_reason="submitted" if final else None)
+
+    def item(a, slot, award):
+        return build(AttemptItemRecord, attempt_id=a.id, slot=slot, version_id=uuid4(), display_no=slot,
+                     written_answer="", flagged=False, answer_revision=1, saved_at=now, awarded_marks=award,
+                     graded_by=None, options=())
+
+    zed, amy, open_ = attempt(), attempt(), attempt(final=False)
+    accounts = {zed.candidate_id: AccountSummary(zed.candidate_id, "z@x.test", "Zed", frozenset({"candidate"})),
+                amy.candidate_id: AccountSummary(amy.candidate_id, "a@x.test", "Amy", frozenset({"candidate"}))}
+    register = ScoreRegister.build(
+        [zed, open_, amy],
+        {zed.id: [item(zed, 1, Decimal("2.00")), item(zed, 2, None)],
+         amy.id: [item(amy, 1, Decimal("2.00")), item(amy, 2, Decimal("3.00"))]},
+        accounts)
+    assert [(l.display_name, l.graded_count, l.total_score) for l in register] == [
+        ("Amy", 2, Decimal("5.00")), ("Zed", 1, None)]
+    assert len(register) == 2 and not register.lines[1].fully_graded

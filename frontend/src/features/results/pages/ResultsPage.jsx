@@ -1,3 +1,4 @@
+import { ScoreStrip } from "../components/instruments.jsx";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   Banner,
@@ -171,6 +172,8 @@ export default function ResultsPage({ api, params, navigate }) {
             </strong>
           </div>
         </div>
+
+        {data.attempts.length > 0 && <ScoreStrip attempts={data.attempts} total={data.total_marks} mean={s.mean_score} median={s.median_score} />}
 
         <h3>Candidate score register</h3>
         {data.attempts.length === 0 ? (

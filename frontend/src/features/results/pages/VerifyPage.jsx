@@ -1,3 +1,4 @@
+import { Stamp, VerifyExplainer } from "../components/instruments.jsx";
 import React, { useState } from "react";
 import { Banner, PageHead, StatusPill } from "../components/primitives.jsx";
 import { isPdfBytes, sha256HexFromBuffer, validateVerifyInputs } from "../domain/rules.js";
@@ -64,7 +65,8 @@ export default function VerifyPage({ api }) {
         details={<span>Confirm report authenticity without revealing candidate, exam, or score details</span>}
       />
 
-      <section className="board" style={{ maxWidth: 680 }}>
+      <div className="res-verify-grid">
+      <section className="board">
         <h2>Report authenticity check</h2>
         <p className="res-muted" style={{ marginBottom: 16 }}>
           Select the downloaded PDF report (computed locally in your browser) or paste its SHA-256 digest together with the verification code printed on the report.
@@ -92,6 +94,7 @@ export default function VerifyPage({ api }) {
 
         {status === "valid" && (
           <Banner tone="sage" title="Valid authentic Folio report" role="status">
+            <Stamp mark="Valid" legend="Folio · Verification service · Authentic report ·" className="res-verdict-stamp" />
             <p>
               <StatusPill tone="sage" glyph="✓" label="Valid" /> The report bytes and verification code match an issued Folio record. No candidate, exam, or score details are disclosed by this service.
             </p>
@@ -100,6 +103,7 @@ export default function VerifyPage({ api }) {
 
         {status === "invalid" && (
           <Banner tone="rust" title="Report verification failed" role="alert">
+            <Stamp mark="Void" tone="rust" legend="Folio · Verification service · No matching report ·" className="res-verdict-stamp" />
             <p>
               <StatusPill tone="rust" glyph="✕" label="Not valid" /> The verification code and SHA-256 digest do not match any issued report. The file may have been altered or the code is incorrect.
             </p>
@@ -115,14 +119,17 @@ export default function VerifyPage({ api }) {
         <form onSubmit={handleVerify} noValidate>
           <div className="res-field">
             <label htmlFor="verify-code">Verification code</label>
+            <span className="res-muted res-hint" id="verify-code-hint">Copy it from the report as printed. Spaces, hyphens and lower case are fine.</span>
             <input
               id="verify-code"
               className="res-input res-mono"
               type="text"
-              placeholder="e.g. FOL-..."
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="e.g. 7K2M-9QXD-4HPR-…"
               value={code}
               aria-invalid={codeIssue ? true : undefined}
-              aria-describedby={codeIssue ? "verify-code-err" : undefined}
+              aria-describedby={codeIssue ? "verify-code-hint verify-code-err" : "verify-code-hint"}
               onChange={e => {
                 setCode(e.target.value);
                 if (status === "valid" || status === "invalid") setStatus("empty");
@@ -180,6 +187,8 @@ export default function VerifyPage({ api }) {
           </button>
         </form>
       </section>
+      <VerifyExplainer />
+      </div>
     </main>
   );
 }

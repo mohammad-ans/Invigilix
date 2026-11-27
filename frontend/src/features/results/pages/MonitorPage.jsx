@@ -15,6 +15,13 @@ import {
   isFeedStale,
   validateAnnouncementInput,
 } from "../domain/rules.js";
+import { SeatingPlan } from "../components/instruments.jsx";
+import { formatRemaining, remainingMs } from "../domain/visuals.js";
+
+const URGENT_MS = 5 * 60_000;
+
+const VIEW_KEY = "folio.results.monitorView";
+const readView = () => { try { return localStorage.getItem(VIEW_KEY) === "seats" ? "seats" : "register"; } catch { return "register"; } };
 
 function two(n) {
   return String(n).padStart(2, "0");
@@ -32,6 +39,8 @@ export default function MonitorPage({ api, params, navigate, pollMs = 8000 }) {
   const [message, setMessage] = useState("");
   const [formIssue, setFormIssue] = useState(null);
   const [postState, setPostState] = useState("idle");
+  const [view, setView] = useState(readView);
+  const chooseView = next => { setView(next); try { localStorage.setItem(VIEW_KEY, next); } catch { /* storage may be blocked */ } };
 
   const load = useCallback(async ({ background = false } = {}) => {
     if (!background) setLoading(true);
@@ -67,6 +76,15 @@ export default function MonitorPage({ api, params, navigate, pollMs = 8000 }) {
   }, [load, pollMs]);
 
   const stale = Boolean(syncError) || isFeedStale(lastSyncMs, nowMs, STALE_FEED_MS);
+  const leftMs = row => (row.finalized_at || !row.deadline_at || !data ? null
+    : remainingMs(row.deadline_at, data.server_time, lastSyncMs, nowMs));
+  const timeLeft = row => {
+    const ms = leftMs(row);
+    return ms === null ? null : { text: formatRemaining(ms), urgent: ms <= URGENT_MS };
+  };
+  const nextToFinish = data?.roster
+    .filter(r => leftMs(r) !== null)
+    .sort((a, b) => leftMs(a) - leftMs(b))[0];
 
   async function handlePost(e) {
     e.preventDefault();
@@ -171,7 +189,20 @@ export default function MonitorPage({ api, params, navigate, pollMs = 8000 }) {
             </div>
           </div>
 
-          {data.roster.length === 0 ? (
+          {nextToFinish && (
+            <p className={`res-next-deadline${timeLeft(nextToFinish).urgent ? " res-next-deadline--urgent" : ""}`} role="status">
+              <span aria-hidden="true">⏱</span> <b>Next to finish:</b> {nextToFinish.display_name} · {timeLeft(nextToFinish).text} · deadline {formatTime(nextToFinish.deadline_at)}
+            </p>
+          )}
+
+          {data.roster.length > 0 && (
+            <div className="res-viewswitch" role="group" aria-label="Roster view">
+              <button type="button" className="res-chip" aria-pressed={view === "register"} onClick={() => chooseView("register")}>Register</button>
+              <button type="button" className="res-chip" aria-pressed={view === "seats"} onClick={() => chooseView("seats")}>Seating plan</button>
+            </div>
+          )}
+
+          {data.roster.length > 0 && view === "seats" ? <SeatingPlan roster={data.roster} timeLeft={timeLeft} /> : data.roster.length === 0 ? (
             <EmptyPanel
               title="No enrolled candidates yet"
               detail="Enrolled candidates and live attempt progress appear here once candidates are assigned."
@@ -184,6 +215,7 @@ export default function MonitorPage({ api, params, navigate, pollMs = 8000 }) {
                     <th>Candidate</th>
                     <th>Answered</th>
                     <th>Attempt</th>
+                    <th>Time left</th>
                     <th>Notes</th>
                   </tr>
                 </thead>
@@ -201,6 +233,11 @@ export default function MonitorPage({ api, params, navigate, pollMs = 8000 }) {
                       </td>
                       <td data-label="Attempt">
                         <AttemptStatusBadge status={row.status} />
+                      </td>
+                      <td data-label="Time left">
+                        {timeLeft(row)
+                          ? <span className={`res-mono${timeLeft(row).urgent ? " res-timeleft--urgent" : ""}`}>{timeLeft(row).text}</span>
+                          : <span className="res-muted">—</span>}
                       </td>
                       <td data-label="Notes">
                         {row.incident_count > 0 ? (

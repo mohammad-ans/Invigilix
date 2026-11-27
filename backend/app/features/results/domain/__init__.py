@@ -1,5 +1,7 @@
 """Domain package for results, grading policy, analytics, and release gating."""
 from .analytics import (
+    ScoreLine,
+    ScoreRegister,
     ClassSummary,
     IncorrectSelectionStat,
     QuestionAnalytics,
@@ -8,6 +10,7 @@ from .analytics import (
     is_item_blank,
 )
 from .errors import Conflict, Forbidden, Issue, NotFound, ResultsError, ValidationFailed
+from .verification import Sha256Digest, VerificationCode
 from .grading import (
     OBJECTIVE_RULES,
     compute_attempt_total,
@@ -46,6 +49,10 @@ from .values import (
 )
 
 __all__ = [
+    "ScoreLine",
+    "ScoreRegister",
+    "Sha256Digest",
+    "VerificationCode",
     "AccountSummary",
     "AnnouncementRecord",
     "AttemptEventRecord",

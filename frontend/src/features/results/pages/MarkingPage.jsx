@@ -1,4 +1,9 @@
-import React, { useCallback, useEffect, useState } from "react";
+import { MarkChips, RedPenMark } from "../components/instruments.jsx";
+import { markingProgress, markSteps, scriptLabels } from "../domain/visuals.js";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+
+const BLIND_KEY = "folio.results.blindMarking";
+const readBlind = () => { try { return localStorage.getItem(BLIND_KEY) === "on"; } catch { return false; } };
 import {
   Banner,
   EmptyPanel,
@@ -10,7 +15,7 @@ import {
 } from "../components/primitives.jsx";
 import { formatDateTime, formatMarks, validateAwardInput } from "../domain/rules.js";
 
-function WrittenResponseCard({ api, item, frozen, onGraded }) {
+function WrittenResponseCard({ api, item, frozen, onGraded, blind = false, scriptLabel = "" }) {
   const [draft, setDraft] = useState(item.awarded_marks ?? "");
   const [issue, setIssue] = useState(null);
   const [saveState, setSaveState] = useState("idle");
@@ -45,7 +50,7 @@ function WrittenResponseCard({ api, item, frozen, onGraded }) {
   const isBlank = !item.written_answer || !item.written_answer.trim();
 
   return (
-    <article className="sheet" aria-labelledby={`title-${item.attempt_id}-${item.slot}`}>
+    <article className="sheet" id={`script-${item.attempt_id}-${item.slot}`} aria-labelledby={`title-${item.attempt_id}-${item.slot}`}>
       <div className="folio-line">
         <span className="qno">
           Slot {String(item.slot).padStart(2, "0")} · Display #{item.display_no} · {item.topic}
@@ -65,10 +70,14 @@ function WrittenResponseCard({ api, item, frozen, onGraded }) {
         {item.prompt}
       </h3>
 
-      <p className="res-muted">
-        Candidate: <strong>{item.candidate_name}</strong> ({item.candidate_email}) · Finalized{" "}
-        {formatDateTime(item.finalized_at)} ({item.close_reason})
-      </p>
+      {blind ? (
+        <p className="res-muted res-blind-id"><strong>{scriptLabel}</strong> · identity hidden for fair marking</p>
+      ) : (
+        <p className="res-muted">
+          Candidate: <strong>{item.candidate_name}</strong> ({item.candidate_email}) · Finalized{" "}
+          {formatDateTime(item.finalized_at)} ({item.close_reason})
+        </p>
+      )}
 
       {item.rubric && (
         <div className="res-rubric">
@@ -77,7 +86,8 @@ function WrittenResponseCard({ api, item, frozen, onGraded }) {
         </div>
       )}
 
-      <div className="res-answer-box" aria-label="Candidate written response">
+      <div className="res-answer-box res-script" aria-label="Candidate written response">
+        <RedPenMark awarded={item.awarded_marks} cap={item.max_marks} />
         {isBlank ? <span className="res-muted">Blank response (auto-scored 0.00 at finalization).</span> : item.written_answer}
       </div>
 
@@ -117,6 +127,9 @@ function WrittenResponseCard({ api, item, frozen, onGraded }) {
           </div>
         </div>
 
+        <MarkChips steps={markSteps(item.max_marks)} value={draft} disabled={frozen || saveState === "saving"}
+          onPick={v => { setDraft(v); setIssue(null); setSaveState("idle"); }} />
+
         {issue && (
           <p id={`${inputId}-err`} className="res-field-error" role="alert" style={{ marginTop: 8 }}>
             {issue.message}
@@ -133,6 +146,9 @@ export default function MarkingPage({ api, params, navigate }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filterPending, setFilterPending] = useState(false);
+  const [blind, setBlind] = useState(readBlind);
+  const chooseBlind = on => { setBlind(on); try { localStorage.setItem(BLIND_KEY, on ? "on" : "off"); } catch { /* storage may be blocked */ } };
+  const labels = useMemo(() => scriptLabels(queue?.items ?? []), [queue]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -190,7 +206,16 @@ export default function MarkingPage({ api, params, navigate }) {
   }
 
   const frozen = Boolean(queue.results_published_at);
-  const visible = filterPending ? queue.items.filter(it => it.awarded_marks === null) : queue.items;
+  const filtered = filterPending ? queue.items.filter(it => it.awarded_marks === null) : queue.items;
+  // In blind mode, order by script label so position cannot hint at who finished when.
+  const visible = blind ? [...filtered].sort((a, b) => labels.get(a.attempt_id).localeCompare(labels.get(b.attempt_id)) || a.slot - b.slot) : filtered;
+  const progress = markingProgress(queue.items);
+  const nextUnmarked = visible.find(it => it.awarded_marks === null);
+  function goToNextUnmarked() {
+    if (!nextUnmarked) return;
+    document.getElementById(`script-${nextUnmarked.attempt_id}-${nextUnmarked.slot}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    document.getElementById(`award-${nextUnmarked.attempt_id}-${nextUnmarked.slot}`)?.focus({ preventScroll: true });
+  }
 
   return (
     <main className="shell">
@@ -223,6 +248,11 @@ export default function MarkingPage({ api, params, navigate }) {
       <section className="board" style={{ marginBottom: 18 }}>
         <div className="split">
           <h2>Marking summary</h2>
+          <div className="row res-marking-switches">
+          <label className="res-switch">
+            <input type="checkbox" checked={blind} onChange={e => chooseBlind(e.target.checked)} />
+            <span>Blind marking</span>
+          </label>
           <label className="row" style={{ fontSize: 13 }}>
             <input
               type="checkbox"
@@ -231,6 +261,17 @@ export default function MarkingPage({ api, params, navigate }) {
             />
             Pending only ({queue.pending_written_count})
           </label>
+          </div>
+        </div>
+        {blind && <p className="res-muted res-blind-note">Names, emails and finish times are hidden while you mark, and scripts are ordered by label. Awards are still stored against the right attempt.</p>}
+        <div className="res-marking-progress">
+          <span><b className="res-mono">{progress.done}</b> of <b className="res-mono">{progress.total}</b> {progress.total === 1 ? "script" : "scripts"} marked</span>
+          <span className="res-marking-progress__rule" aria-hidden="true">
+            {queue.items.map((it, n) => <i key={n} className={it.awarded_marks !== null ? "on" : ""} />)}
+          </span>
+          <button type="button" className="secondary" disabled={!nextUnmarked || frozen} onClick={goToNextUnmarked}>
+            {nextUnmarked ? "Next unmarked →" : "All marked ✓"}
+          </button>
         </div>
         <div className="summary-grid" style={{ marginBottom: 0 }}>
           <div className="stat">
@@ -268,6 +309,8 @@ export default function MarkingPage({ api, params, navigate }) {
               item={item}
               frozen={frozen}
               onGraded={handleGraded}
+              blind={blind}
+              scriptLabel={labels.get(item.attempt_id)}
             />
           ))}
         </div>

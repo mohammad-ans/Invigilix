@@ -9,6 +9,7 @@ from uuid import UUID
 
 from .grading import compute_attempt_total
 from .values import (
+    AccountSummary,
     AttemptItemRecord,
     AttemptRecord,
     CENT,
@@ -197,3 +198,56 @@ def compute_class_summary(
         min_score=min_val,
         max_score=max_val,
     )
+
+
+@dataclass(frozen=True)
+class ScoreLine:
+    """One finalized attempt's standing: who, how much is graded, and the total."""
+
+    attempt: AttemptRecord
+    display_name: str
+    email: str
+    graded_count: int
+    item_count: int
+    total_score: Decimal | None
+
+    @property
+    def fully_graded(self) -> bool:
+        return self.total_score is not None
+
+
+class ScoreRegister:
+    """Finalized attempts with totals, alphabetical by candidate.
+
+    Built once and used by both the results view and the class summary PDF,
+    so the score on screen and the score in the export cannot disagree (SR02).
+    """
+
+    def __init__(self, lines: Iterable[ScoreLine]) -> None:
+        self.lines = tuple(lines)
+
+    @classmethod
+    def build(cls, attempts: Iterable[AttemptRecord],
+              items_by_attempt: dict[UUID, list[AttemptItemRecord]],
+              accounts: dict[UUID, "AccountSummary"]) -> "ScoreRegister":
+        lines = []
+        for attempt in attempts:
+            if attempt.finalized_at is None:
+                continue
+            items = items_by_attempt.get(attempt.id, ())
+            account = accounts.get(attempt.candidate_id)
+            lines.append(ScoreLine(
+                attempt=attempt,
+                display_name=account.display_name if account else str(attempt.candidate_id),
+                email=account.email if account else "",
+                graded_count=sum(1 for it in items if it.awarded_marks is not None),
+                item_count=len(items),
+                total_score=compute_attempt_total(it.awarded_marks for it in items),
+            ))
+        return cls(sorted(lines, key=lambda line: line.display_name.lower()))
+
+    def __iter__(self):
+        return iter(self.lines)
+
+    def __len__(self) -> int:
+        return len(self.lines)

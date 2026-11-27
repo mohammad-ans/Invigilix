@@ -42,10 +42,15 @@ test("validateVerifyInputs, PDF header check, and SHA-256 helper", async () => {
 
   const hex = await sha256HexFromBuffer(bytes.buffer);
   assert.match(hex, /^[0-9a-f]{64}$/);
-  assert.deepEqual(validateVerifyInputs(" CODE-1 ", hex.toUpperCase()), {
-    code: "CODE-1",
+  // A code and digest typed from paper: lower case, spaces, grouped digest.
+  const grouped = hex.toUpperCase().match(/.{4}/g).join(" ");
+  assert.deepEqual(validateVerifyInputs(" 7k2m 9qxd 4hpr tv8w 3jnc 6gfa 2bze ", grouped), {
+    code: "7K2M-9QXD-4HPR-TV8W-3JNC-6GFA-2BZE",
     digest: hex,
   });
+  // Look-alikes map to digits; a string that cannot be a Folio code is named as such.
+  assert.equal(validateVerifyInputs("7K2M-9QXD-4HPR-TV8W-3JNC-6GFA-2BZO", hex).code, "7K2M-9QXD-4HPR-TV8W-3JNC-6GFA-2BZ0");
+  assert.equal(validateVerifyInputs("CODE-1", hex).issues[0].code, "invalid_code");
 
   const bad = validateVerifyInputs("", "bad");
   assert.equal(bad.issues.length, 2);

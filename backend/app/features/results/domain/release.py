@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import secrets
 from datetime import datetime
 from typing import Iterable, Mapping
 from uuid import UUID
 
 from .errors import Conflict, Issue
 from .values import AttemptItemRecord, AttemptRecord, ExamRecord, ExamStatus
+from .verification import VerificationCode
 
 
 def derive_exam_status(exam: ExamRecord, now: datetime) -> ExamStatus:
@@ -113,8 +113,8 @@ def require_release_ready(
 
 
 def generate_verification_code() -> str:
-    """Generate a URL-safe verification code with 192 bits (>= 128 bits) of CSPRNG entropy."""
-    return secrets.token_urlsafe(24)
+    """A new canonical verification code: 140 CSPRNG bits in Crockford base-32 groups."""
+    return str(VerificationCode.generate())
 
 
 def compute_sha256_hex(data: bytes) -> str:

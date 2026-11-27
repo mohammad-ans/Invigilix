@@ -3,10 +3,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Mapping
 from uuid import UUID, uuid4
 
 from ..domain import (
+    AccountSummary,
     AnnouncementRecord,
+    AttemptEventRecord,
+    AttemptItemRecord,
+    AttemptRecord,
     Conflict,
     ExamStatus,
     Forbidden,
@@ -30,6 +35,15 @@ class MonitorCounts:
     submitted: int
     expired: int
     finalized: int
+
+    @classmethod
+    def of(cls, rows: "tuple[RosterProgressRow, ...]", enrolled: int) -> "MonitorCounts":
+        """Derive the counts from the roster rows, so they can never disagree."""
+        status = [r.status for r in rows]
+        submitted, expired = status.count("submitted"), status.count("expired")
+        return cls(enrolled=enrolled, not_started=status.count("not_started"),
+                   in_progress=status.count("working") + status.count("reconnected"),
+                   submitted=submitted, expired=expired, finalized=submitted + expired)
 
 
 @dataclass(frozen=True)
@@ -69,6 +83,13 @@ class AnnouncementView:
     author_name: str
     posted_at: datetime
     message: str
+
+    @classmethod
+    def of(cls, record: AnnouncementRecord, accounts: Mapping[UUID, AccountSummary]) -> "AnnouncementView":
+        author = accounts.get(record.author_id)
+        return cls(id=record.id, exam_id=record.exam_id, author_id=record.author_id,
+                   author_name=author.display_name if author else "Examiner",
+                   posted_at=record.posted_at, message=record.message)
 
 
 @dataclass(frozen=True)
@@ -116,124 +137,21 @@ class MonitorService:
             accounts = uow.accounts.by_ids(account_ids)
 
             attempt_by_candidate = {a.candidate_id: a for a in attempts}
-            events_by_attempt: dict[UUID, list] = {}
+            events_by_attempt: dict[UUID, list[AttemptEventRecord]] = {}
             for ev in events:
                 events_by_attempt.setdefault(ev.attempt_id, []).append(ev)
-
-            roster_ids = sorted(
-                {e.candidate_id for e in enrollments if e.active} | {a.candidate_id for a in attempts},
-                key=lambda cid: accounts.get(cid).display_name.lower() if cid in accounts else str(cid),
-            )
             active_set = {e.candidate_id for e in enrollments if e.active}
-
-            roster: list[RosterProgressRow] = []
-            not_started = in_progress = submitted = expired = 0
-
-            for cid in roster_ids:
-                acct = accounts.get(cid)
-                display_name = acct.display_name if acct else str(cid)
-                email = acct.email if acct else ""
-                att = attempt_by_candidate.get(cid)
-                if att is None:
-                    not_started += 1
-                    roster.append(
-                        RosterProgressRow(
-                            candidate_id=cid,
-                            display_name=display_name,
-                            email=email,
-                            enrollment_active=cid in active_set,
-                            attempt_id=None,
-                            status="not_started",
-                            answered_count=0,
-                            total_items=total_items,
-                            started_at=None,
-                            deadline_at=None,
-                            finalized_at=None,
-                            close_reason=None,
-                            last_saved_at=None,
-                            incident_count=0,
-                        )
-                    )
-                    continue
-
-                att_items = items_by_attempt.get(att.id, ())
-                answered = sum(
-                    1
-                    for it in att_items
-                    if it.slot in kind_by_slot and not is_item_blank(it, kind_by_slot[it.slot])
-                )
-                saved_times = [it.saved_at for it in att_items if it.saved_at is not None]
-                last_saved = max(saved_times) if saved_times else None
-                att_events = sorted(
-                    events_by_attempt.get(att.id, ()),
-                    key=lambda ev: ev.recorded_at,
-                )
-                incident_count = sum(
-                    1 for ev in att_events if ev.kind in ("reconnected", "reported_incident")
-                )
-
-                if att.finalized_at is not None:
-                    status = att.close_reason or "submitted"
-                    if status == "expired":
-                        expired += 1
-                    else:
-                        submitted += 1
-                else:
-                    in_progress += 1
-                    latest_kind = att_events[-1].kind if att_events else "started"
-                    status = "reconnected" if latest_kind == "reconnected" else "working"
-
-                roster.append(
-                    RosterProgressRow(
-                        candidate_id=cid,
-                        display_name=display_name,
-                        email=email,
-                        enrollment_active=cid in active_set,
-                        attempt_id=att.id,
-                        status=status,
-                        answered_count=answered,
-                        total_items=total_items,
-                        started_at=att.started_at,
-                        deadline_at=att.deadline_at,
-                        finalized_at=att.finalized_at,
-                        close_reason=att.close_reason,
-                        last_saved_at=last_saved,
-                        incident_count=incident_count,
-                    )
-                )
-
+            roster_ids = sorted(
+                active_set | {a.candidate_id for a in attempts},
+                key=lambda cid: accounts[cid].display_name.lower() if cid in accounts else str(cid),
+            )
+            roster = tuple(
+                self._progress_row(cid, accounts.get(cid), attempt_by_candidate.get(cid),
+                                   items_by_attempt, events_by_attempt, kind_by_slot,
+                                   total_items, cid in active_set)
+                for cid in roster_ids
+            )
             attempt_owner = {a.id: a.candidate_id for a in attempts}
-            incident_views = tuple(
-                IncidentEventView(
-                    id=ev.id,
-                    attempt_id=ev.attempt_id,
-                    candidate_id=attempt_owner.get(ev.attempt_id, exam.owner_id),
-                    candidate_name=(
-                        accounts[attempt_owner[ev.attempt_id]].display_name
-                        if attempt_owner.get(ev.attempt_id) in accounts
-                        else str(attempt_owner.get(ev.attempt_id, ""))
-                    ),
-                    kind=ev.kind,
-                    recorded_at=ev.recorded_at,
-                    note=ev.note,
-                )
-                for ev in sorted(events, key=lambda e: e.recorded_at, reverse=True)
-            )
-
-            ann_views = tuple(
-                AnnouncementView(
-                    id=ann.id,
-                    exam_id=ann.exam_id,
-                    author_id=ann.author_id,
-                    author_name=accounts[ann.author_id].display_name
-                    if ann.author_id in accounts
-                    else "Examiner",
-                    posted_at=ann.posted_at,
-                    message=ann.message,
-                )
-                for ann in sorted(announcements, key=lambda a: a.posted_at, reverse=True)
-            )
-
             return MonitorSnapshot(
                 exam_id=exam.id,
                 exam_title=exam.title,
@@ -244,18 +162,50 @@ class MonitorService:
                 results_published_at=exam.results_published_at,
                 server_time=now,
                 total_items=total_items,
-                counts=MonitorCounts(
-                    enrolled=len(active_set),
-                    not_started=not_started,
-                    in_progress=in_progress,
-                    submitted=submitted,
-                    expired=expired,
-                    finalized=submitted + expired,
-                ),
-                roster=tuple(roster),
-                incidents=incident_views,
-                announcements=ann_views,
+                counts=MonitorCounts.of(roster, enrolled=len(active_set)),
+                roster=roster,
+                incidents=tuple(self._incident_view(ev, attempt_owner, accounts)
+                                for ev in sorted(events, key=lambda e: e.recorded_at, reverse=True)),
+                announcements=tuple(AnnouncementView.of(a, accounts)
+                                    for a in sorted(announcements, key=lambda a: a.posted_at, reverse=True)),
             )
+
+    @staticmethod
+    def _progress_row(candidate_id: UUID, account: AccountSummary | None,
+                      attempt: AttemptRecord | None,
+                      items_by_attempt: Mapping[UUID, list[AttemptItemRecord]],
+                      events_by_attempt: Mapping[UUID, list[AttemptEventRecord]],
+                      kind_by_slot: Mapping[int, str], total_items: int,
+                      active: bool) -> RosterProgressRow:
+        """One candidate's progress: answered count, latest save, observations, status."""
+        name = account.display_name if account else str(candidate_id)
+        email = account.email if account else ""
+        if attempt is None:
+            return RosterProgressRow(candidate_id, name, email, active, None, "not_started", 0,
+                                     total_items, None, None, None, None, None, 0)
+        items = items_by_attempt.get(attempt.id, ())
+        answered = sum(1 for it in items
+                       if it.slot in kind_by_slot and not is_item_blank(it, kind_by_slot[it.slot]))
+        saved = [it.saved_at for it in items if it.saved_at is not None]
+        timeline = sorted(events_by_attempt.get(attempt.id, ()), key=lambda ev: ev.recorded_at)
+        observations = sum(1 for ev in timeline if ev.kind in ("reconnected", "reported_incident"))
+        if attempt.finalized_at is not None:
+            status = attempt.close_reason or "submitted"
+        else:
+            status = "reconnected" if timeline and timeline[-1].kind == "reconnected" else "working"
+        return RosterProgressRow(candidate_id, name, email, active, attempt.id, status, answered,
+                                 total_items, attempt.started_at, attempt.deadline_at,
+                                 attempt.finalized_at, attempt.close_reason,
+                                 max(saved) if saved else None, observations)
+
+    @staticmethod
+    def _incident_view(ev: AttemptEventRecord, attempt_owner: Mapping[UUID, UUID],
+                       accounts: Mapping[UUID, AccountSummary]) -> IncidentEventView:
+        candidate_id = attempt_owner.get(ev.attempt_id)
+        account = accounts.get(candidate_id) if candidate_id else None
+        return IncidentEventView(id=ev.id, attempt_id=ev.attempt_id, candidate_id=candidate_id,
+                                 candidate_name=account.display_name if account else str(candidate_id or ""),
+                                 kind=ev.kind, recorded_at=ev.recorded_at, note=ev.note)
 
     def post_announcement(self, actor: Actor, exam_id: UUID, message: str) -> AnnouncementView:
         cleaned = message.strip()
@@ -292,15 +242,7 @@ class MonitorService:
             uow.announcements.add(record)
             accounts = uow.accounts.by_ids([actor.id])
             uow.commit()
-            author_name = accounts[actor.id].display_name if actor.id in accounts else "Examiner"
-            return AnnouncementView(
-                id=record.id,
-                exam_id=record.exam_id,
-                author_id=record.author_id,
-                author_name=author_name,
-                posted_at=record.posted_at,
-                message=record.message,
-            )
+            return AnnouncementView.of(record, accounts)
 
     def list_announcements(self, actor: Actor, exam_id: UUID) -> list[AnnouncementView]:
         require_enabled(actor)
@@ -322,16 +264,5 @@ class MonitorService:
 
             announcements = uow.announcements.for_exam(exam.id)
             accounts = uow.accounts.by_ids({ann.author_id for ann in announcements})
-            return [
-                AnnouncementView(
-                    id=ann.id,
-                    exam_id=ann.exam_id,
-                    author_id=ann.author_id,
-                    author_name=accounts[ann.author_id].display_name
-                    if ann.author_id in accounts
-                    else "Examiner",
-                    posted_at=ann.posted_at,
-                    message=ann.message,
-                )
-                for ann in sorted(announcements, key=lambda a: a.posted_at, reverse=True)
-            ]
+            return [AnnouncementView.of(ann, accounts)
+                    for ann in sorted(announcements, key=lambda a: a.posted_at, reverse=True)]
