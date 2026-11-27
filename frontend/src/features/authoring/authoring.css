@@ -388,6 +388,14 @@
 .au-mail-chip--repeat { border-style: dashed; border-color: #9ba697; background: var(--sheet); color: var(--muted); text-decoration: line-through; }
 .au-mail-chip--repeat em { text-decoration: none; }
 
+/* ---------------------------------------------------------- one-time credential sheet */
+.au-credsheet { margin-top: 20px; padding: 16px 18px; border: 1px solid var(--amber); border-top: 3px solid var(--amber); border-radius: var(--radius); background: #fffdf6; }
+.au-credsheet .au-banner { margin-bottom: 12px; }
+.au-credsheet__head { align-items: center; flex-wrap: wrap; gap: 8px; }
+.au-credsheet__head .au-subhead { margin: 0; }
+.au-credsheet__actions { flex-wrap: wrap; justify-content: flex-end; margin-top: 14px; }
+.au-credsheet__download { display: inline-flex; align-items: center; text-decoration: none; color: var(--graphite) !important; }
+
 /* ---------------------------------------------------------- exam timetable */
 .au-timetable { margin: 0 0 18px; padding: 14px 16px 10px; border: 1px solid var(--rule); border-radius: var(--radius); background: #f9f8f1; }
 .au-timetable .au-subhead { margin: 0 0 10px; }

@@ -14,6 +14,8 @@ import RosterPage from "./pages/RosterPage.jsx";
 import PreviewPage from "./pages/PreviewPage.jsx";
 
 export { ExamRegister, ExamEditor, QuestionBank, RosterPage, PreviewPage };
+// SR04 admin import action, embedded by the foundation's /admin/accounts page.
+export { CandidateImportPanel } from "./components/CandidateImportPanel.jsx";
 export { AuthoringApi, AUTHORING_API_METHODS } from "./api/AuthoringApi.js";
 export { HttpAuthoringApi, ApiError } from "./api/HttpAuthoringApi.js";
 export { FixtureAuthoringApi } from "./api/FixtureAuthoringApi.js";

@@ -177,3 +177,14 @@ class TestCandidateImport:
         with pytest.raises(Forbidden):
             world.module.candidate_import.run(world.actor("examiner"),
                                               b"email,display_name\na@b.c,A\n", commit=False)
+
+
+def test_checking_a_candidate_file_never_issues_credentials(world):
+    """SR04: initial passwords are exposed once, by the committing import only."""
+    data = b"email,display_name\nmaya@example.test,Maya Rossi\n"
+    before = world.snapshot()
+    checked = world.module.candidate_import.run(world.actor("admin"), data, commit=False)
+    assert (checked.created, checked.committed, checked.credentials) == (1, False, [])
+    assert world.snapshot() == before
+    issued = world.module.candidate_import.run(world.actor("admin"), data, commit=True)
+    assert [email for email, _ in issued.credentials] == ["maya@example.test"]

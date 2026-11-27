@@ -33,6 +33,10 @@ export class AuthoringApi {
   enroll(id, emails) { return abstract("enroll")(id, emails); }
   setEnrollment(id, candidateId, active) { return abstract("setEnrollment")(id, candidateId, active); }
   importRoster(id, csv, options) { return abstract("importRoster")(id, csv, options); }
+
+  // Candidate accounts (SR04, administrators). A committing import returns each
+  // new account's initial credential exactly once.
+  importCandidates(csv, options) { return abstract("importCandidates")(csv, options); }
 }
 
 /** Method names that make up the interface (for conformance checks). */
