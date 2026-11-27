@@ -2,6 +2,7 @@
 // Mirrors HttpResultsApi signatures and error shapes so UI states (empty, stale,
 // pending release, validation, valid/invalid verification) work offline.
 import { ApiError } from "./HttpResultsApi.js";
+import { ResultsApi } from "./ResultsApi.js";
 import {
   sha256HexFromBuffer,
   validateAnnouncementInput,
@@ -20,16 +21,16 @@ function buildSamplePdfBytes(text) {
   return new TextEncoder().encode(body);
 }
 
-const SAMPLE_VERIFICATION_CODE = "FOL-AT09-9f8e7d6c5b4a321098765432";
+const SAMPLE_VERIFICATION_CODE = "7K2M-9QXD-4HPR-TV8W-3JNC-6GFA-2BZE";
 const SAMPLE_PDF_BYTES = buildSamplePdfBytes(
   `Folio Official Candidate Result | Field ecology | Sana Ali | 7.00 / 10.00 | ${SAMPLE_VERIFICATION_CODE}`
 );
 
-export class FixtureResultsApi {
-  mode = "preview";
-
+export class FixtureResultsApi extends ResultsApi {
   constructor() {
+    super();
     const now = new Date("2026-11-27T10:48:00Z");
+    this._epoch = { fixed: now.getTime(), real: Date.now() };
     const iso = mins => new Date(now.getTime() + mins * 60_000).toISOString();
 
     this._reports = new Map();
@@ -167,8 +168,27 @@ export class FixtureResultsApi {
         results_published_at: null,
         unfinalized_attempts: 0,
         pending_written_count: 1,
-        graded_written_count: 0,
+        graded_written_count: 1,
         items: [
+          {
+            attempt_id: "att-nora",
+            candidate_id: "cand-nora",
+            candidate_name: "Nora Khan",
+            candidate_email: "nora.khan@example.test",
+            slot: 3,
+            display_no: 2,
+            topic: "Sampling",
+            difficulty: "hard",
+            prompt: "Why would you repeat the survey on a second transect?",
+            rubric: "Award up to 4.00 for explaining habitat representativeness, spatial replication, and reducing sampling variance.",
+            written_answer: "",
+            max_marks: "4.00",
+            awarded_marks: "0.00",
+            graded_by: null,
+            graded_by_name: null,
+            finalized_at: iso(-1),
+            close_reason: "expired",
+          },
           {
             attempt_id: "att-sana",
             candidate_id: "cand-sana",
@@ -436,10 +456,14 @@ export class FixtureResultsApi {
     };
   }
 
+  get mode() { return "preview"; }
+
   async getMonitor(examId) {
     const mon = this._monitors[examId];
     if (!mon) fail(404, "not_found", "Exam was not found.");
-    mon.server_time = new Date().toISOString();
+    // Server time advances at real speed from the fixture's fixed epoch, so
+    // deadlines count down consistently in the preview.
+    mon.server_time = new Date(this._epoch.fixed + (Date.now() - this._epoch.real)).toISOString();
     return clone(mon);
   }
 
@@ -588,7 +612,7 @@ export class FixtureResultsApi {
     await this._sampleDigestReady;
     const check = validateVerifyInputs(verificationCode, sha256Hex);
     if (check.issues) fail(422, "validation_failed", "The request has invalid fields.", check.issues);
-    const rec = this._reports.get(check.code);
+    const rec = this._reports.get(check.code); // check.code is already canonical
     return { valid: Boolean(rec && rec.sha256_hex === check.digest) };
   }
 }

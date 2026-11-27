@@ -1,6 +1,7 @@
 // Production HTTP adapter for the results FastAPI router.
 // Keeps private payloads out of caches (cache: "no-store") and carries CSRF
 // headers on cookie-authenticated mutations.
+import { ResultsApi } from "./ResultsApi.js";
 
 export class ApiError extends Error {
   constructor(status, body) {
@@ -25,23 +26,26 @@ function filenameFromDisposition(header, fallback) {
   return match ? match[1] : fallback;
 }
 
-export class HttpResultsApi {
-  mode = "live";
+export class HttpResultsApi extends ResultsApi {
+  #baseUrl; #fetch; #csrfHeader;
 
   constructor({
     baseUrl = "/api",
     fetchImpl = (...args) => fetch(...args),
     csrfHeader = () => ({ "X-CSRF-Token": readCookie("csrf_token") ?? "" }),
   } = {}) {
-    this.baseUrl = baseUrl.replace(/\/$/, "");
-    this.fetch = fetchImpl;
-    this.csrfHeader = csrfHeader;
+    super();
+    this.#baseUrl = baseUrl.replace(/\/$/, "");
+    this.#fetch = fetchImpl;
+    this.#csrfHeader = csrfHeader;
   }
+
+  get mode() { return "live"; }
 
   async #request(method, path, { json, includeAuth = true, binary = false, fallbackFilename = "report.pdf" } = {}) {
     const headers = { Accept: binary ? "application/pdf" : "application/json" };
     if (includeAuth && method !== "GET") {
-      Object.assign(headers, this.csrfHeader());
+      Object.assign(headers, this.#csrfHeader());
     }
     let body;
     if (json !== undefined) {
@@ -51,7 +55,7 @@ export class HttpResultsApi {
 
     let response;
     try {
-      response = await this.fetch(this.baseUrl + path, {
+      response = await this.#fetch(this.#baseUrl + path, {
         method,
         headers,
         body,

@@ -13,6 +13,7 @@ export {
   ResultsPage,
   VerifyPage,
 };
+export { ResultsApi, RESULTS_API_METHODS } from "./api/ResultsApi.js";
 export { ApiError, HttpResultsApi } from "./api/HttpResultsApi.js";
 export { FixtureResultsApi, SAMPLE_VERIFICATION_CODE } from "./api/FixtureResultsApi.js";
 export { matchRoute, paths } from "./paths.js";
