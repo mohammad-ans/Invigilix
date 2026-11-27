@@ -1,6 +1,6 @@
 import { request } from "./api.js";
 import { change } from "./store.js";
-import { accept, enqueue, resolveConflict, responseOf, visibleItem } from "./queue.js";
+import { accept, enqueue, resolveConflict, responseOf } from "./queue.js";
 
 const offlineError = error => !error.status || error.status >= 500;
 const denied = error => [401, 403, 404].includes(error.status);
@@ -56,7 +56,7 @@ export class AttemptSession {
     this.refreshing = true;
     try {
       const paper = await request(this.path);
-      if (!this.active) return;
+      if (!this.active || this.closed || this.state.denied) return;
       if (paper.finalized_at) return await this.close(paper);
       const offset = Date.parse(paper.server_time) - Date.now();
       await this.mutate(old => {
@@ -68,7 +68,7 @@ export class AttemptSession {
         return { paper, offset, pending: old?.pending ?? [], conflicts: old?.conflicts ?? {},
           scratch: old?.scratch ?? "" };
       });
-      this.show({ error: "", status: "Saved on server" });
+      this.show({ error: "", status: this.record.pending.length ? "Saving" : "Saved on server" });
       await this.flush();
     } catch (error) {
       await this.failure(error);
@@ -79,6 +79,7 @@ export class AttemptSession {
 
   async failure(error) {
     if (denied(error)) {
+      this.state.denied = true;
       await this.mutate(() => undefined);
       this.show({ error: "Access to this attempt has ended.", denied: true });
     } else {
@@ -186,10 +187,22 @@ export class AttemptSession {
   async close(receipt) {
     this.closed = true;
     let outstanding = [];
+    let accepted = receipt.items;
+    if (!accepted && this.record?.pending.length) {
+      try { accepted = (await request(this.path)).items; } catch { /* Receipt is already authoritative. */ }
+    }
     await this.mutate(record => {
-      outstanding = [...new Set(record?.pending.map(edit => edit.slot) ?? [])];
+      const lastBySlot = new Map(record?.pending.map(edit => [edit.slot, edit]) ?? []);
+      outstanding = [...lastBySlot.values()].filter(edit => {
+        const item = accepted?.find(candidate => candidate.slot === edit.slot);
+        if (!item || item.flagged !== edit.body.flagged) return true;
+        if (item.kind === "written") return item.written_answer !== edit.body.written_answer;
+        const ids = edit.body.selected_option_ids;
+        return ids.length !== item.selected_option_ids.length || !ids.every(id => item.selected_option_ids.includes(id));
+      }).map(edit => edit.slot);
       return undefined;
     });
-    this.show({ receipt, outstanding, error: "" });
+    const { attempt_id, finalized_at, close_reason } = receipt;
+    this.show({ receipt: { attempt_id, finalized_at, close_reason }, outstanding, error: "" });
   }
 }

@@ -30,6 +30,10 @@ export async function change(account, attempt, update) {
 }
 
 export async function purgeDeliveryAccount(account) {
+  window.dispatchEvent(new CustomEvent("folio-delivery-logout", { detail: account }));
+  const channel = new BroadcastChannel("folio-delivery-logout");
+  channel.postMessage(account);
+  channel.close();
   const db = await open();
   return new Promise((resolve, reject) => {
     const tx = db.transaction("attempts", "readwrite");

@@ -1,0 +1,139 @@
+/** Uses Vite, React and Playwright. CHROME_PATH can select a local Chromium executable. */
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createServer } from "node:http";
+import { mkdtemp, readFile, readdir, mkdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, extname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { chromium } from "playwright";
+import { build } from "vite";
+
+const source = fileURLToPath(new URL("./browser", import.meta.url));
+const worker = new URL("../../frontend/src/features/delivery/offline-shell.js", import.meta.url);
+const common = { flagged:false, revision:0, selected_option_ids:[], written_answer:"", max_marks:2 };
+const items = [
+  {kind:"single",prompt:"Which measurement estimates species richness?", options:["Number of species","Population density","Mean canopy height"]},
+  {kind:"multiple",prompt:"Select the observations recorded in a quadrat survey.", options:["Species count","Ground cover","River discharge"]},
+  {kind:"written",prompt:"Describe one source of sampling bias.",options:[]},
+].map((q,i)=>({...common,...q,slot:i+1,display_no:i+1,options:q.options.map((label,n)=>({id:n+1,label}))}));
+
+test("dashboard, offline reload, replay, conflict, account preferences and local cleanup", async t => {
+  const out = await mkdtemp(join(tmpdir(),"folio-delivery-"));
+  t.after(()=>rm(out,{recursive:true,force:true}));
+  await build({root:source,logLevel:"warn",build:{outDir:out,emptyOutDir:true}});
+  const assets = (await readdir(join(out,"assets"))).map(f=>"/assets/"+f);
+  let receipt;
+  let prefs = {font_percent:100, workspace_layout:"standard"};
+  const deadline = new Date(Date.now()+1800000).toISOString();
+  const dashboard = [{id:"exam",title:"Field ecology",instructions:"Review every response before submitting.",
+    opens_at:new Date().toISOString(),closes_at:deadline,attempt_id:"sample",status:"available"}];
+  const server = createServer(async(req,res)=>{
+    const path = req.url;
+    const send = (data,status=200) => { res.writeHead(status,{"Content-Type":"application/json"}); res.end(JSON.stringify(data)); };
+    if (req.headers.accept?.includes("text/html") || path === "/shell.html") {
+      res.writeHead(200,{"Content-Type":"text/html"});return res.end(await readFile(join(out,"index.html")));
+    }
+    if (assets.includes(path)) {
+      res.writeHead(200,{"Content-Type":extname(path)===".js"?"application/javascript":"text/css"});
+      return res.end(await readFile(join(out,path)));
+    }
+    if (path==="/sw.js") {
+      res.writeHead(200,{"Content-Type":"application/javascript"});
+      return res.end(await readFile(worker,"utf8") + "\ninstallDeliveryShell(self," +
+        JSON.stringify({version:"fixture",shell:"/shell.html",assets})+");");
+    }
+    if(path==="/me/exams") return send(dashboard);
+    if(path==="/attempts/sample" || path==="/exams/exam/attempts") return send({
+      attempt_id:"sample",title:"Field ecology",items,preferences:prefs,deadline_at:deadline,
+      server_time:new Date().toISOString(),...receipt});
+    let content="";
+    for await(const chunk of req) content+=chunk;
+    const body = content && JSON.parse(content);
+    if(path.startsWith("/attempts/sample/items/")) {
+      const item=items[Number(path.split("/").pop())-1];
+      if (body.base_revision!==item.revision) return send({code:"stale_revision",item},409);
+      Object.assign(item,body,{revision:item.revision+1});
+      return send({revision:item.revision,saved_at:new Date().toISOString()});
+    }
+    if(path==="/me/preferences") { prefs=body;return send(prefs); }
+    if(path==="/attempts/sample/submit") {
+      receipt={attempt_id:"sample",finalized_at:new Date().toISOString(),close_reason:"submitted"};return send(receipt);
+    }
+    send({},404);
+  });
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  t.after(()=>server.close());
+  const browser=await chromium.launch({executablePath:process.env.CHROME_PATH || undefined});
+  t.after(()=>browser.close());
+  const origin="http://127.0.0.1:"+server.address().port;
+  const context=await browser.newContext({viewport:{width:1280,height:820}});
+  const page=await context.newPage();
+  page.setDefaultTimeout(8000);
+  const shot=async name=>{
+    if(process.env.DELIVERY_SCREENSHOTS) {
+      await mkdir(process.env.DELIVERY_SCREENSHOTS,{recursive:true});
+      await page.screenshot({path:join(process.env.DELIVERY_SCREENSHOTS,name+".png"),fullPage:true});
+    }
+  };
+  await page.goto(origin+"/me/exams");
+  await page.getByText("Field ecology").waitFor();
+  await shot("dashboard-desktop");
+  await page.setViewportSize({width:360,height:800});
+  await shot("dashboard-mobile");
+  await page.getByRole("button",{name:"Resume attempt"}).click();
+  await page.getByRole("radio").first().waitFor();
+  await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
+  await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
+  await shot("attempt-mobile");
+  await page.setViewportSize({width:1280,height:820});
+  await shot("attempt-desktop");
+  await page.getByRole("radio").first().check();
+  await page.getByText("Saved on server",{exact:true}).waitFor();
+  assert.deepEqual(items[0].selected_option_ids,[1]);
+  await page.setViewportSize({width:360,height:800});
+  await page.getByText("Workspace settings",{exact:true}).click();
+  await page.getByLabel("Text size").selectOption("200");
+  await page.getByLabel("Focus layout").click();
+  await page.waitForFunction(()=>document.querySelector("main.focus"));
+  assert.ok(await page.evaluate(()=>document.body.scrollWidth<=innerWidth));
+  await page.getByText("Scratchpad",{exact:true}).click();
+  await page.getByLabel("Private rough work").fill("Private note");
+  await context.setOffline(true);
+  await page.getByRole("button",{name:"Question 3, unanswered"}).focus();
+  await page.keyboard.press("Enter");
+  await page.getByLabel("Your answer").fill("My offline draft");
+  await page.getByText("On this device",{exact:true}).waitFor();
+  await page.reload();
+  await page.getByRole("button",{name:"Question 3, answered"}).click();
+  assert.equal(await page.getByLabel("Your answer").inputValue(),"My offline draft");
+  await page.getByText("Scratchpad",{exact:true}).click();
+  assert.equal(await page.getByLabel("Private rough work").inputValue(),"Private note");
+  items[2].written_answer="Accepted on another device";
+  items[2].revision++;
+  await context.setOffline(false);
+  await page.getByText("Answer conflict",{exact:true}).waitFor();
+  await shot("conflict-mobile");
+  await page.getByRole("button",{name:"Keep my draft"}).click();
+  await page.getByText("Saved on server",{exact:true}).waitFor();
+  assert.equal(items[2].written_answer,"My offline draft");
+  const device=await browser.newPage();
+  await device.goto(origin+"/attempts/sample");
+  await device.waitForSelector("main.focus");
+  await device.getByText("Scratchpad",{exact:true}).click();
+  assert.equal(await device.getByLabel("Private rough work").inputValue(),"");
+  await device.getByLabel("Private rough work").fill("Second device note");
+  await device.evaluate(()=>window.fixtureLogout());
+  async function localCount(p) {
+    return p.evaluate(()=>new Promise(resolve=>{
+      const db=indexedDB.open("folio-delivery");
+      db.onsuccess=()=>{const r=db.result.transaction("attempts").objectStore("attempts").count();
+        r.onsuccess=()=>resolve(r.result);};
+    }));
+  }
+  assert.equal(await localCount(device),0);
+  await page.getByRole("button",{name:"Review answers",exact:true}).last().click();
+  await page.getByRole("button",{name:"Confirm submission"}).click();
+  await page.getByRole("heading",{name:"Final receipt"}).waitFor();
+  assert.equal(await localCount(page),0);
+});

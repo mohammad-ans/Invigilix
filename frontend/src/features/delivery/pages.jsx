@@ -173,12 +173,24 @@ function LiveAttempt({ accountId, attemptId }) {
     const model = new AttemptSession(accountId, attemptId, setState);
     setSession(model);
     model.init();
+    const logout = id => {
+      if (id !== accountId) return;
+      model.active = false;
+      model.record = undefined;
+      setState({ denied: true, error: "You have signed out." });
+    };
+    const localLogout = e => logout(e.detail);
+    const channel = new BroadcastChannel("folio-delivery-logout");
+    channel.onmessage = e => logout(e.data);
+    window.addEventListener("folio-delivery-logout", localLogout);
     const refresh = () => { if (!model.state.denied) model.refresh(); };
     const interval = setInterval(refresh, 15000);
     window.addEventListener("online", refresh);
     return () => {
       model.active = false;
       clearInterval(interval);
+      channel.close();
+      window.removeEventListener("folio-delivery-logout", localLogout);
       window.removeEventListener("online", refresh);
     };
   }, [accountId, attemptId]);
