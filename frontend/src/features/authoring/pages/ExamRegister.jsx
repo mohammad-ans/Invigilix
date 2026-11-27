@@ -7,6 +7,7 @@ import { Dialog } from "../components/instruments.jsx";
 import { ExamForm, blankDetails } from "../components/ExamForm.jsx";
 import { LedgerArt } from "../components/illustrations.jsx";
 import { ExamTimetable } from "../components/insights.jsx";
+import { InTray } from "../components/InTray.jsx";
 import { EmptyState, Loading, LoadError, ModeLabel, StateBadge, Stat } from "../components/primitives.jsx";
 
 const FILTERS = ["all", "draft", "scheduled", "ongoing", "completed"];
@@ -37,6 +38,7 @@ export default function ExamRegister({ api, navigate }) {
         {FILTERS.slice(1).map(s => <Stat key={s} label={STATE[s].label} value={two(counts[s])} />)}
       </div>
 
+      {counts.all > 0 && <InTray exams={exams.data} navigate={navigate} />}
       {counts.all > 0 && <ExamTimetable exams={exams.data} onOpen={e => navigate(paths.edit(e.id))} />}
 
       <div className="au-filters" role="group" aria-label="Show exams by state">

@@ -75,3 +75,34 @@ export function timetable(exams, now = new Date(), days = 14) {
   });
   return { rows, columns, nowLeft: (100 * (now.getTime() - from)) / span, hidden: exams.length - rows.length };
 }
+
+const HOUR = 36e5;
+const TONE_ORDER = { urgent: 0, action: 1, info: 2 };
+
+/**
+ * The examiner's in-tray (user analysis: "which of my exams need me today?").
+ * Derived only from the register summary, so it costs no extra requests.
+ * Each note: { key, examId, tone: urgent|action|info, title, detail, action: { label, route } }.
+ */
+export function attentionItems(exams, now = new Date()) {
+  const t = now.getTime(), notes = [];
+  const add = (exam, tone, title, detail, label, route) =>
+    notes.push({ key: `${exam.id}:${title}`, examId: exam.id, examTitle: exam.title, tone, title, detail, action: { label, route }, opens: Date.parse(exam.opens_at) });
+  for (const e of exams) {
+    const opens = Date.parse(e.opens_at), closes = Date.parse(e.closes_at);
+    const balanced = e.item_count > 0 && Number(e.allocated_marks) === Number(e.total_marks);
+    const hours = Math.round((opens - t) / HOUR);
+    if (e.state === "draft") {
+      if (closes <= t) add(e, "urgent", "Window has passed", "This draft can no longer be published. Move the window or copy it to a new draft.", "Open draft", "edit");
+      else if (opens - t <= 72 * HOUR) add(e, "urgent", `Opens in ${hours <= 1 ? "under an hour" : hours < 48 ? `${hours} hours` : `${Math.round(hours / 24)} days`}, still a draft`, "Candidates cannot see it until it is published.", "Review and publish", "edit");
+      if (e.item_count === 0) add(e, "action", "No questions on the paper", "Add questions from the bank.", "Add questions", "edit");
+      else if (!balanced) add(e, "action", "Marks do not add up", `${Number(e.allocated_marks).toFixed(2)} allocated of ${Number(e.total_marks).toFixed(2)} declared.`, "Fix marks", "edit");
+      else if (closes > t && opens - t > 72 * HOUR) add(e, "info", "Ready to publish", "Every check that the register can see passes.", "Review", "edit");
+    }
+    if ((e.state === "draft" || e.state === "scheduled") && e.enrolled === 0 && closes > t) {
+      add(e, "action", "No candidates enrolled", "Nobody will be able to sit this exam.", "Open roster", "enrollment");
+    }
+    if (e.state === "ongoing") add(e, "info", "In progress now", `${e.enrolled} enrolled; the window closes ${new Date(closes).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}.`, "Roster", "enrollment");
+  }
+  return notes.sort((a, b) => TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || a.opens - b.opens);
+}

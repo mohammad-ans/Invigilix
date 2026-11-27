@@ -151,3 +151,27 @@ export function examState(exam, now = new Date()) {
   if (t < Date.parse(exam.closes_at)) return "ongoing";
   return "completed";
 }
+
+/**
+ * One-click ways to make the paper add up (user analysis: the most common
+ * publish blocker). Each option is a plain descriptor; the page applies it.
+ *   { kind: "set_total", cents }                       declare what is allocated
+ *   { kind: "adjust_slot", slot, fromCents, toCents }  move the gap onto one slot
+ */
+export function balanceOptions(slots, totalMarks) {
+  const t = tally(slots, totalMarks);
+  if (!slots.length || t.balanced) return [];
+  const options = [];
+  if (t.allocated > 0) options.push({ kind: "set_total", cents: t.allocated });
+  if (t.remaining > 0 && t.declared > 0) {
+    const last = t.segments[t.segments.length - 1];
+    options.push({ kind: "adjust_slot", slot: last.slot, fromCents: last.cents, toCents: last.cents + t.remaining });
+  }
+  if (t.excess > 0) {
+    const largest = [...t.segments].sort((a, b) => b.cents - a.cents || b.slot - a.slot)[0];
+    if (largest.cents - t.excess > 0) {
+      options.push({ kind: "adjust_slot", slot: largest.slot, fromCents: largest.cents, toCents: largest.cents - t.excess });
+    }
+  }
+  return options;
+}

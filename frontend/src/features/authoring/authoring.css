@@ -348,6 +348,46 @@
 .au-diff__key { font: 600 11px var(--mono); color: var(--rust); }
 .au-diff__key--on { color: var(--forest); }
 
+/* ---------------------------------------------------------- one-click mark fixes */
+.au-fixes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+.au-fixes .au-sub { flex-basis: 100%; margin: 0; }
+.au-fix { display: inline-flex; gap: 6px; align-items: baseline; min-height: 36px; padding: 6px 12px; border: 1px solid var(--rust); border-radius: 3px; background: var(--sheet); color: var(--graphite); font: 600 13px var(--sans); cursor: pointer; }
+.au-fix b { font: 600 13px var(--mono); color: var(--rust); }
+.au-fix:hover:not(:disabled) { background: #fff6f2; }
+.au-fix:disabled { opacity: .55; cursor: default; }
+
+/* ---------------------------------------------------------- in-tray */
+.au-intray { margin: 0 0 18px; }
+.au-intray__head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.au-intray__head h2 { margin: 0; }
+.au-intray__clear { padding: 12px 14px; border: 1px dashed #9ba697; border-radius: var(--radius); color: var(--forest); font-size: 14px; }
+.au-intray__clear b { font-family: var(--mono); margin-right: 6px; }
+.au-intray__notes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.au-note { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 4px 10px; padding: 12px 14px 12px 10px; background: var(--sheet); border: 1px solid var(--rule); border-left: 4px solid var(--green); border-radius: 2px; }
+.au-note::after { content: ""; position: absolute; top: -1px; right: -1px; width: 16px; height: 16px; background: linear-gradient(225deg, var(--paper) 0 50%, #e2e4d8 50% 100%); border-left: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.au-note--urgent { border-left-color: var(--rust); }
+.au-note--action { border-left-color: var(--amber); }
+.au-note__tab { grid-row: 1 / span 2; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; font: 700 12px var(--mono); color: var(--sheet); background: var(--green); }
+.au-note--urgent .au-note__tab { background: var(--rust); }
+.au-note--action .au-note__tab { background: var(--amber); }
+.au-note__text { display: grid; gap: 1px; min-width: 0; }
+.au-note__tone { font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.au-note--urgent .au-note__tone { color: var(--rust); }
+.au-note--action .au-note__tone { color: var(--amber); }
+.au-note__text strong { font: 17px/1.2 var(--serif); }
+.au-note__title { font: 600 13px var(--sans); }
+.au-note__text p { font-size: 12px; color: var(--muted); }
+.au-note__go { grid-column: 2; justify-self: start; margin-top: 6px; min-height: 34px; padding: 6px 12px; }
+.au-intray__more { margin-top: 8px; }
+
+/* ---------------------------------------------------------- pasted email chips */
+.au-mailchips { list-style: none; margin: 10px 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.au-mail-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 8px; border: 1px solid #bfceb6; border-radius: 3px; background: var(--sage); font: 12px var(--mono); color: var(--forest); overflow-wrap: anywhere; }
+.au-mail-chip em { font: italic 11px var(--sans); }
+.au-mail-chip--bad { border-color: var(--rust); background: var(--rust-bg); color: var(--rust); }
+.au-mail-chip--repeat { border-style: dashed; border-color: #9ba697; background: var(--sheet); color: var(--muted); text-decoration: line-through; }
+.au-mail-chip--repeat em { text-decoration: none; }
+
 /* ---------------------------------------------------------- exam timetable */
 .au-timetable { margin: 0 0 18px; padding: 14px 16px 10px; border: 1px solid var(--rule); border-radius: var(--radius); background: #f9f8f1; }
 .au-timetable .au-subhead { margin: 0 0 10px; }

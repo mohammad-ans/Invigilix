@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PageHead, SaveStatus } from "../../../design/Folio.jsx";
 import { paths } from "../paths.js";
 import { useResource } from "../hooks.js";
-import { groupIssues, parseMarks, tally } from "../domain/rules.js";
+import { centsToMarks, groupIssues, parseMarks, tally } from "../domain/rules.js";
 import { RULE, formatDate, formatDuration, formatMarks, formatWindow, two } from "../domain/format.js";
-import { Checklist, Dialog, FrozenSeal, MarkLedger } from "../components/instruments.jsx";
+import { BalanceFixes, Checklist, Dialog, FrozenSeal, MarkLedger } from "../components/instruments.jsx";
+import { detailsBody } from "../api/AuthoringApi.js";
 import { ExamForm } from "../components/ExamForm.jsx";
 import {
   Banner, DifficultyScale, ErrorSummary, KindTag, Loading, LoadError, ModeLabel, StateBadge, VersionTag,
@@ -58,6 +59,16 @@ export default function ExamEditor({ api, params, navigate }) {
     catch (e) { setSaveState({ state: "error", text: "Save failed" }); throw e; }
   }
 
+  async function setDeclaredTotal(cents) {
+    setSaveState({ state: "pending", text: "Saving" });
+    try {
+      exam.replace(await api.updateExam(data.id, detailsBody(data, { total_marks: centsToMarks(cents) })));
+      setSaveState({ state: "saved", text: `Declared total set to ${centsToMarks(cents)}` });
+    } catch {
+      setSaveState({ state: "error", text: "Save failed" });
+    }
+  }
+
   async function savePaper() {
     setSaveState({ state: "pending", text: "Saving" });
     try {
@@ -105,7 +116,11 @@ export default function ExamEditor({ api, params, navigate }) {
     {frozen ? <FrozenSeal publishedAt={data.published_at} itemCount={data.items.length} fresh={justPublished} />
       : ledger.balanced || !items.length ? <Banner tone="info" title="Editable draft">Candidates cannot see this exam. Changes save to the draft until you publish.</Banner>
       : <Banner tone="error" mark="≠" title="Marks do not add up">
-          Slots allocate {formatMarks(ledger.allocated / 100)} of the declared {formatMarks(ledger.declared / 100)}. Adjust a slot’s marks or the declared total before publishing.
+          Slots allocate {formatMarks(ledger.allocated / 100)} of the declared {formatMarks(ledger.declared / 100)}. Pick a fix, or edit a slot’s marks yourself.
+          <BalanceFixes slots={slots} totalMarks={data.total_marks}
+            totalBlockedReason={detailsDirty ? "Save or discard the particulars you are editing first." : null}
+            onSetTotal={setDeclaredTotal}
+            onAdjustSlot={(slot, cents) => edit(items.map((x, n) => n === slot - 1 ? { ...x, max_marks: centsToMarks(cents) } : x))} />
         </Banner>}
 
     <div className="workgrid au-editor">
@@ -165,7 +180,7 @@ export default function ExamEditor({ api, params, navigate }) {
             <div><dt>Duration</dt><dd>{formatDuration(data.duration_minutes)} per attempt, capped at closing</dd></div>
             <div><dt>Declared total</dt><dd className="au-mono">{formatMarks(data.total_marks)}</dd></div>
             <div><dt>Shuffle</dt><dd>{[data.shuffle_questions && "Question order", data.shuffle_choices && "Choice order"].filter(Boolean).join(" · ") || "None"}</dd></div>
-          </dl> : <ExamForm key={data.id} initial={data} submitLabel="Save particulars" onSubmit={saveParticulars} onDirty={setDetailsDirty} />}
+          </dl> : <ExamForm key={`${data.id}:${data.total_marks}`} initial={data} submitLabel="Save particulars" onSubmit={saveParticulars} onDirty={setDetailsDirty} />}
         </article>
       </div>
 

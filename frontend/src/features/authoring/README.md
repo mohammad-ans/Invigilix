@@ -15,6 +15,16 @@ Each page takes `{ api, params, navigate }`. Mount them from `authoringRoutes` i
 
 To review without a backend, run `npm run dev` and open `/src/features/authoring/demo/index.html`.
 
+## Built from persona walkthroughs
+
+Each feature below answers a step where a scripted persona walkthrough stalled. The walkthroughs drive the preview harness and count user actions.
+
+| Persona task | Before | After |
+| --- | --- | --- |
+| Examiner fixes a paper that allocates 12 of 20 marks, then publishes | 5 actions; the total field is below the fold | 4 actions; the fixes sit in the message that reports the problem |
+| Examiner pastes three emails, one mistyped | Refused after submitting; retype; 4 actions | Flagged while typing; valid ones enrolled; the typo is kept to fix; 2 actions |
+| Examiner asks which exams need them | Open up to 5 exams one by one | The in-tray answers on the register |
+
 ## Design notes
 
 The pages use the Folio tokens and classes (`folio.css`) and `PageHead` / `SaveStatus` from `Folio.jsx`. Feature styles live in `authoring.css` under an `au-` prefix:
