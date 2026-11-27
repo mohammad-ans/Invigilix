@@ -2,15 +2,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, readdir, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, extname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { build } from "vite";
+import { buildCandidateShell } from "./browser/build.mjs";
 
-const source = fileURLToPath(new URL("./browser", import.meta.url));
-const worker = new URL("../../frontend/src/features/delivery/offline-shell.js", import.meta.url);
 const common = { flagged:false, revision:0, selected_option_ids:[], written_answer:"", max_marks:2 };
 const items = [
   {kind:"single",prompt:"Which measurement estimates species richness?", options:["Number of species","Population density","Mean canopy height"]},
@@ -21,13 +18,21 @@ const items = [
 test("dashboard, offline reload, replay, conflict, account preferences and local cleanup", async t => {
   const out = await mkdtemp(join(tmpdir(),"folio-delivery-"));
   t.after(()=>rm(out,{recursive:true,force:true}));
-  await build({root:source,logLevel:"warn",build:{outDir:out,emptyOutDir:true}});
-  const assets = (await readdir(join(out,"assets"))).map(f=>"/assets/"+f);
+  const assets = await buildCandidateShell(out);
   let receipt;
   let prefs = {font_percent:100, workspace_layout:"standard"};
   const deadline = new Date(Date.now()+1800000).toISOString();
   const dashboard = [{id:"exam",title:"Field ecology",instructions:"Review every response before submitting.",
-    opens_at:new Date().toISOString(),closes_at:deadline,attempt_id:"sample",status:"available"}];
+    opens_at:new Date().toISOString(),closes_at:deadline,deadline_at:deadline,duration_seconds:1800,attempt_id:"sample",status:"available"},
+    {id:"next",title:"Conservation genetics",instructions:"Read the population study before answering.",
+     opens_at:new Date(Date.now()+86400000).toISOString(),closes_at:new Date(Date.now()+90000000).toISOString(),duration_seconds:3600,status:"upcoming"},
+    {id:"prior",title:"Population dynamics",instructions:"",opens_at:new Date(Date.now()-86400000).toISOString(),
+     closes_at:new Date(Date.now()-84000000).toISOString(),duration_seconds:2400,attempt_id:"prior-attempt",status:"completed"}];
+  ["Soil science", "Plant communities", "Conservation methods", "Wetland systems"].forEach((title, i) => {
+    const starts = Date.now() + (i + 2) * 86400000;
+    dashboard.push({...dashboard[1], id:"upcoming-" + i, title,
+      opens_at:new Date(starts).toISOString(), closes_at:new Date(starts + 3600000).toISOString()});
+  });
   const server = createServer(async(req,res)=>{
     const path = req.url;
     const send = (data,status=200) => { res.writeHead(status,{"Content-Type":"application/json"}); res.end(JSON.stringify(data)); };
@@ -40,8 +45,7 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
     }
     if (path==="/sw.js") {
       res.writeHead(200,{"Content-Type":"application/javascript"});
-      return res.end(await readFile(worker,"utf8") + "\ninstallDeliveryShell(self," +
-        JSON.stringify({version:"fixture",shell:"/shell.html",assets})+");");
+      return res.end(await readFile(join(out,"sw.js")));
     }
     if(path==="/me/exams") return send(dashboard);
     if(path==="/attempts/sample" || path==="/exams/exam/attempts") return send({
@@ -78,7 +82,36 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   };
   await page.goto(origin+"/me/exams");
   await page.getByText("Field ecology").waitFor();
+  const plate = page.locator(".dv-ticket .dv-engraving");
+  const animationName = locator => locator.evaluate(el => getComputedStyle(el).animationName);
+  assert.equal(await animationName(plate), "dv-register-plate");
+  await page.emulateMedia({reducedMotion:"reduce"});
+  assert.equal(await animationName(plate), "none");
+  assert.equal(await animationName(page.locator(".dv-plate-bed")), "none");
+  await page.emulateMedia({reducedMotion:"no-preference"});
   await shot("dashboard-desktop");
+  const bed = page.locator(".dv-plate-bed");
+  const initialTransform = await bed.evaluate(el => getComputedStyle(el).transform);
+  await page.locator(".dv-ticket").evaluate(el => scrollBy(0, el.getBoundingClientRect().top + el.offsetHeight / 2));
+  await page.waitForFunction(before => getComputedStyle(document.querySelector(".dv-plate-bed")).transform !== before,
+    initialTransform);
+  const register = page.getByRole("navigation", {name:"Exam register sections"});
+  await register.getByRole("link", {name:"Completed"}).focus();
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.activeElement.id === "register-completed" &&
+    document.querySelector('.dv-index-tabs [aria-current="location"]')?.textContent === "Completed");
+  assert.equal(await page.locator(".dv-calendar-reading b").textContent(),
+    await page.locator(".dv-group-completed time").evaluate(el =>
+      new Date(el.dateTime).toLocaleString(undefined, {month:"short",day:"numeric",weekday:"short"})));
+  await register.getByRole("link", {name:"Available"}).click();
+  await page.waitForFunction(() => document.activeElement.id === "register-available" &&
+    document.querySelector(".dv-counter")?.getAttribute("aria-label")?.startsWith("Exam 1 of "));
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.waitForFunction(() => document.querySelector('.dv-index-tabs [aria-current]')?.textContent === "Available");
+  await page.getByRole("button", {name:/, 1 exam$/}).first().click();
+  assert.equal(await page.locator(".dv-entry").count(),1);
+  await page.getByRole("button",{name:"Show all exams"}).click();
+  assert.equal(await page.locator(".dv-entry").count(),dashboard.length);
   await page.setViewportSize({width:360,height:800});
   await shot("dashboard-mobile");
   await page.getByRole("button",{name:"Resume attempt"}).click();
@@ -91,6 +124,17 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   await page.getByRole("radio").first().check();
   await page.getByText("Saved on server",{exact:true}).waitFor();
   assert.deepEqual(items[0].selected_option_ids,[1]);
+  // A candidate can move straight from a page turn into the response field.
+  const keepsFocus = await page.evaluate(async () => {
+    document.querySelector('button[aria-label="Question 3, unanswered"]').click();
+    await Promise.resolve();
+    const input = document.querySelector(".dv-written");
+    input.focus();
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    return document.activeElement === input;
+  });
+  assert.equal(keepsFocus, true);
+  await page.getByRole("button", {name:"Question 1, answered"}).click();
   await page.setViewportSize({width:360,height:800});
   await page.getByText("Workspace settings",{exact:true}).click();
   await page.getByLabel("Text size").selectOption("200");
@@ -100,12 +144,17 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   await page.getByText("Scratchpad",{exact:true}).click();
   await page.getByLabel("Private rough work").fill("Private note");
   await context.setOffline(true);
+  await page.emulateMedia({reducedMotion:"reduce"});
   await page.getByRole("button",{name:"Question 3, unanswered"}).focus();
   await page.keyboard.press("Enter");
+  await page.waitForFunction(()=>document.activeElement?.id==="delivery-prompt");
+  assert.equal(await animationName(page.locator(".dv-folio-no b span")), "none");
   await page.getByLabel("Your answer").fill("My offline draft");
   await page.getByText("On this device",{exact:true}).waitFor();
+  assert.equal(await page.getByLabel("Your answer").evaluate(el=>el===document.activeElement),true);
   await page.reload();
-  await page.getByRole("button",{name:"Question 3, answered"}).click();
+  await page.getByLabel("Your answer").waitFor();
+  assert.equal(await page.getByRole("button",{name:"Question 3, answered"}).getAttribute("aria-current"),"step");
   assert.equal(await page.getByLabel("Your answer").inputValue(),"My offline draft");
   await page.getByText("Scratchpad",{exact:true}).click();
   assert.equal(await page.getByLabel("Private rough work").inputValue(),"Private note");
@@ -117,7 +166,9 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   await page.getByRole("button",{name:"Keep my draft"}).click();
   await page.getByText("Saved on server",{exact:true}).waitFor();
   assert.equal(items[2].written_answer,"My offline draft");
-  const device=await browser.newPage();
+  const replacement = await chromium.launch({executablePath:process.env.CHROME_PATH || undefined});
+  t.after(()=>replacement.close());
+  const device=await replacement.newPage();
   await device.goto(origin+"/attempts/sample");
   await device.waitForSelector("main.focus");
   await device.getByText("Scratchpad",{exact:true}).click();
@@ -133,7 +184,21 @@ test("dashboard, offline reload, replay, conflict, account preferences and local
   }
   assert.equal(await localCount(device),0);
   await page.getByRole("button",{name:"Review answers",exact:true}).last().click();
+  const lastRow = page.locator(".dv-review-list li").last();
+  const marginTransform = () => lastRow.evaluate(el => getComputedStyle(el, "::after").transform);
+  assert.equal(await marginTransform(), "none");
+  await page.emulateMedia({reducedMotion:"no-preference"});
+  await page.evaluate(() => window.scrollTo(0,0));
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const startingMargin = await marginTransform();
+  await lastRow.evaluate(el => el.scrollIntoView({block:"start"}));
+  await page.waitForFunction(before => getComputedStyle(document.querySelector(".dv-review-list li:last-child"), "::after").transform !== before,
+    startingMargin);
+  await page.emulateMedia({reducedMotion:"reduce"});
   await page.getByRole("button",{name:"Confirm submission"}).click();
   await page.getByRole("heading",{name:"Final receipt"}).waitFor();
+  assert.equal(await animationName(page.locator(".dv-imprint")),"none");
+  assert.equal(await page.evaluate(()=>document.activeElement?.id),"receipt-title");
   assert.equal(await localCount(page),0);
+  await shot("receipt-mobile");
 });

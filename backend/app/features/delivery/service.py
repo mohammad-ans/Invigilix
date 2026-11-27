@@ -47,7 +47,7 @@ def exams(db, account_id):
     instant = now(db)
     return db.execute("""
         SELECT e.id, e.title, e.instructions, e.opens_at, e.closes_at,
-               e.duration_seconds, a.id AS attempt_id,
+               e.duration_seconds, a.id AS attempt_id, a.deadline_at,
                CASE WHEN a.finalized_at IS NOT NULL OR %s >= e.closes_at
                          OR %s >= a.deadline_at THEN 'completed'
                     WHEN %s < e.opens_at THEN 'upcoming' ELSE 'available' END AS status

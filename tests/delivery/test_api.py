@@ -1,16 +1,24 @@
 """Run against a disposable PostgreSQL DB using DELIVERY_TEST_DSN."""
 import os
+import socket
+import subprocess
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from threading import Thread
 from unittest.mock import patch
 from uuid import uuid4
 
 import psycopg
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
+from psycopg import sql
 
 from backend.app.features.delivery.router import create_router
 from backend.app.features.delivery.service import expire_due
@@ -55,9 +63,10 @@ class DeliveryAPI(unittest.TestCase):
             if self.actor is None:
                 raise HTTPException(401)
             return self.actor
-        app = FastAPI()
-        app.include_router(create_router(self.connect, identity, self.scorer))
-        self.client = TestClient(app)
+        self.identity = identity
+        self.app = FastAPI()
+        self.app.include_router(create_router(self.connect, identity, self.scorer))
+        self.client = TestClient(self.app)
         self.enter_path = f"/exams/{self.exam}/attempts"
 
     @staticmethod
@@ -65,7 +74,13 @@ class DeliveryAPI(unittest.TestCase):
         return cap if selected == correct else 0
 
     def connect(self):
-        return psycopg.connect(self.dsn, options="-c search_path=" + self.schema, row_factory=dict_row)
+        db = psycopg.connect(self.dsn, row_factory=dict_row, application_name=self.schema)
+        try:
+            db.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(self.schema)))
+            return db
+        except Exception:
+            db.close()
+            raise
 
     def drop_schema(self):
         with psycopg.connect(self.dsn) as db:
@@ -88,6 +103,7 @@ class DeliveryAPI(unittest.TestCase):
             papers = list(pool.map(lambda _: self.enter(), range(2)))
         self.assertEqual(papers[0], papers[1])
         self.assertEqual(datetime.fromisoformat(papers[0]["deadline_at"]), self.cutoff)
+        self.assertEqual(self.client.get("/me/exams").json()[0]["deadline_at"], papers[0]["deadline_at"])
         self.assertEqual([q["display_no"] for q in papers[0]["items"]], [1, 2, 3])
         self.assertNotIn("rubric", str(papers))
         self.assertNotIn("is_correct", str(papers))
@@ -142,6 +158,108 @@ class DeliveryAPI(unittest.TestCase):
         self.clock.stop()
         self.assertEqual(expire_due(self.connect, self.scorer), 1)
         self.assertEqual(expire_due(self.connect, self.scorer), 0)
+
+    def test_save_and_submit_blocked_until_cutoff(self):
+        attempt_id = self.enter()["attempt_id"]
+        path = "/attempts/" + attempt_id
+        edit = dict(base_revision=0, selected_option_ids=[1], flagged=False)
+        self.now.return_value = self.cutoff - timedelta(microseconds=1)
+        with ThreadPoolExecutor(2) as pool:
+            with self.connect() as blocker, psycopg.connect(self.dsn, autocommit=True) as monitor:
+                blocker.execute("SELECT id FROM attempt WHERE id=%s FOR UPDATE", (attempt_id,))
+                save = pool.submit(self.client.put, path + "/items/1", json=edit)
+                submit = pool.submit(self.client.post, path + "/submit")
+                timeout = time.monotonic() + 5
+                while True:
+                    blocked, = monitor.execute("""
+                        SELECT COUNT(*) FROM pg_stat_activity WHERE application_name=%s
+                        AND cardinality(pg_blocking_pids(pid)) > 0
+                    """, (self.schema,)).fetchone()
+                    if blocked == 2:
+                        break
+                    self.assertLess(time.monotonic(), timeout, "Both requests must reach the row lock")
+                    time.sleep(0.01)
+                self.now.return_value = self.cutoff
+            late = save.result(timeout=5)
+            terminal = submit.result(timeout=5)
+        self.assertEqual(late.status_code, 409)
+        self.assertEqual(terminal.status_code, 200)
+        self.assertEqual(late.json()["receipt"], terminal.json())
+        self.assertEqual(terminal.json()["close_reason"], "expired")
+        with self.connect() as db:
+            item = db.execute("SELECT answer_revision, awarded_marks FROM attempt_item WHERE slot=1").fetchone()
+            self.assertEqual(item, {"answer_revision": 0, "awarded_marks": 0})
+            events = db.execute("SELECT kind FROM attempt_event ORDER BY recorded_at").fetchall()
+            self.assertEqual([row["kind"] for row in events], ["started", "expired"])
+
+    @unittest.skipUnless(os.getenv("DELIVERY_LIVE_BROWSER") == "1", "set DELIVERY_LIVE_BROWSER=1 for Chromium")
+    def test_browser_with_postgres(self):
+        import uvicorn
+
+        self.clock.stop()
+        expiry_exam = uuid4()
+        with self.connect() as db:
+            db.execute("""UPDATE exam SET published_at=now()-interval '2 days',
+                          opens_at=now()-interval '1 hour', closes_at=now()+interval '1 hour'""")
+            db.execute("""INSERT INTO exam SELECT %s,owner_id,'Short sitting',instructions,opens_at,closes_at,
+                          8,total_marks,shuffle_objective,shuffle_choices,published_at,NULL FROM exam WHERE id=%s""",
+                       (expiry_exam, self.exam))
+            db.execute("INSERT INTO exam_item SELECT %s,slot,version_id,max_marks FROM exam_item WHERE exam_id=%s",
+                       (expiry_exam, self.exam))
+            db.execute("INSERT INTO enrollment VALUES (%s,%s,%s,true)", (expiry_exam, self.other, self.other))
+        sessions = {uuid4().hex: self.candidate, uuid4().hex: self.other}
+        owner_cookie, peer_cookie = sessions
+
+        def browser_identity(request: Request):
+            actor = sessions.get(request.cookies.get("delivery_test_session"))
+            if actor is None:
+                raise HTTPException(401)
+            return actor
+
+        self.app.dependency_overrides[self.identity] = browser_identity
+        from backend.app.features.delivery.worker import expiry_worker
+        self.app.router.lifespan_context = lambda app: expiry_worker(self.connect, self.scorer, interval_seconds=.2)
+        with TemporaryDirectory() as public, socket.socket() as listener:
+            @self.app.middleware("http")
+            async def candidate_shell(request: Request, call_next):
+                path = request.url.path
+                candidate_page = path == "/me/exams" or (
+                    path.startswith("/attempts/") and path.count("/") == 2
+                )
+                if candidate_page and request.method == "GET" and "text/html" in request.headers.get("accept", ""):
+                    return FileResponse(Path(public) / "index.html")
+                return await call_next(request)
+
+            self.app.mount("/", StaticFiles(directory=public))
+            listener.bind(("127.0.0.1", 0))
+            listener.listen()
+            origin = f"http://127.0.0.1:{listener.getsockname()[1]}"
+            server = uvicorn.Server(uvicorn.Config(self.app, log_level="warning", ws="none"))
+            thread = Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+            thread.start()
+            script = Path(__file__).with_name("live-browser.mjs")
+            try:
+                subprocess.run(["node", str(script), public, origin, str(self.candidate), str(self.other)],
+                               env={**os.environ, "DELIVERY_OWNER_COOKIE": owner_cookie,
+                                    "DELIVERY_PEER_COOKIE": peer_cookie}, check=True, timeout=90)
+            finally:
+                server.should_exit = True
+                thread.join(timeout=10)
+                self.assertFalse(thread.is_alive(), "Live test HTTP server did not shut down")
+        with self.connect() as db:
+            rows = db.execute("""SELECT slot, answer_revision, written_answer, awarded_marks FROM attempt_item
+                                 WHERE exam_id=%s ORDER BY slot""", (self.exam,)).fetchall()
+            self.assertEqual([row["answer_revision"] for row in rows], [1, 0, 2])
+            self.assertEqual([row["awarded_marks"] for row in rows], [1, 0, None])
+            self.assertEqual(rows[2]["written_answer"], "Saved after reconnecting.")
+            events = db.execute("""SELECT kind FROM attempt_event e JOIN attempt a ON a.id=e.attempt_id
+                                   WHERE a.exam_id=%s ORDER BY recorded_at""", (self.exam,)).fetchall()
+            self.assertEqual([row["kind"] for row in events], ["started", "submitted"])
+            expired = db.execute("""SELECT a.close_reason, i.answer_revision, i.written_answer, i.awarded_marks
+                                    FROM attempt a JOIN attempt_item i ON i.attempt_id=a.id
+                                    WHERE a.exam_id=%s AND i.slot=3""", (expiry_exam,)).fetchone()
+            self.assertEqual(expired, {"close_reason": "expired", "answer_revision": 0,
+                                      "written_answer": "", "awarded_marks": 0})
 
     def test_preferences_and_role(self):
         prefs = dict(font_percent=200, workspace_layout="focus")

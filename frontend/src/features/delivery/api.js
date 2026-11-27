@@ -1,5 +1,6 @@
 export async function request(path, method = "GET", body) {
   const response = await fetch(path, {
+    signal: AbortSignal.timeout(12000),
     method, credentials: "same-origin", cache: "no-store",
     headers: body ? { Accept: "application/json", "Content-Type": "application/json" } : { Accept: "application/json" },
     body: body && JSON.stringify(body),
