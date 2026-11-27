@@ -1,0 +1,17 @@
+# Rename to .github/CODEOWNERS and replace @YOUR-MAINTAINER with a real
+# GitHub user or @organization/team with write access. Last match wins.
+/AGENTS.md                       @YOUR-MAINTAINER
+/CLAUDE.md                       @YOUR-MAINTAINER
+/GEMINI.md                       @YOUR-MAINTAINER
+/README.md                       @YOUR-MAINTAINER
+/.github/                        @YOUR-MAINTAINER
+/tools/                          @YOUR-MAINTAINER
+/collaboration/                  @YOUR-MAINTAINER
+/docs/                           @YOUR-MAINTAINER
+/contracts/                      @YOUR-MAINTAINER
+/backend/migrations/             @YOUR-MAINTAINER
+/frontend/src/design/            @YOUR-MAINTAINER
+/frontend/public/                @YOUR-MAINTAINER
+/frontend/package*.json          @YOUR-MAINTAINER
+/frontend/src/main.jsx           @YOUR-MAINTAINER
+/backend/app/main.py             @YOUR-MAINTAINER
