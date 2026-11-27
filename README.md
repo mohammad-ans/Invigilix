@@ -1,6 +1,14 @@
 # Folio
 
-A cross-vendor development kit for the Secure Examination Management System. The product stack is React, FastAPI and PostgreSQL. One checked-in SRS, one design system and explicit branch scopes let Claude Code, Gemini CLI and Codex build separate features in parallel.
+Folio is a React, FastAPI and PostgreSQL examination system. Administrators provision accounts, examiners publish and mark papers, and candidates sit exams and retrieve released scores.
+
+**[Run locally or deploy on Vercel](docs/deploy.md)** for environment variables, database migration, first administrator setup and the complete exam walkthrough.
+
+The seeded demo logins are `demo-admin@example.test`, `demo-examiner@example.test`, and `demo-candidate@example.test`. Set each initial password in the API service before deploying. [Test-account variables](docs/deploy.md#test-accounts)
+
+## Development workflow
+
+One checked-in SRS, one design system and explicit branch scopes let Claude Code, Gemini CLI and Codex build separate features in parallel.
 
 ## 1  Establish the baseline
 
