@@ -1,6 +1,7 @@
 // Preview adapter: fictional records held in memory for this browser session.
 // It implements the HttpAuthoringApi interface with the same response shapes
 // and error bodies, so pages render identically. Nothing reaches a server.
+import { AuthoringApi } from "./AuthoringApi.js";
 import { ApiError } from "./HttpAuthoringApi.js";
 import { parseCsv } from "../domain/csv.js";
 import {
@@ -36,10 +37,9 @@ const SEED_BANK = [
   ["Soil", "hard", "written", "Explain how waterlogging changes nitrogen availability.", [], "manual", "Anaerobic conditions; denitrification; reduced nitrate."],
 ];
 
-export class FixtureAuthoringApi {
-  mode = "preview";
-
+export class FixtureAuthoringApi extends AuthoringApi {
   constructor({ now = () => new Date(), latency = 120 } = {}) {
+    super();
     this.now = now;
     this.latency = latency;
     this.me = { id: uuid(), email: "remy.chen@example.test", display_name: "Remy Chen", roles: ["examiner"], enabled: true };
@@ -51,6 +51,8 @@ export class FixtureAuthoringApi {
     this.enrollments = [];
     this.#seed();
   }
+
+  get mode() { return "preview"; }
 
   // ---------------------------------------------------------------- seed data
   #seed() {
