@@ -96,6 +96,11 @@ class Exam:
             return ExamState.ONGOING
         return ExamState.COMPLETED
 
+    def ensure_roster_open(self, now: datetime) -> None:
+        """Enrollment may change until the window closes; then the roster is a record."""
+        if self.state_at(now) is ExamState.COMPLETED:
+            raise Conflict("exam_closed", "The exam has closed. Its roster is now a record.")
+
     def revise(self, details: ExamDetails) -> None:
         self._ensure_draft()
         self.details = details

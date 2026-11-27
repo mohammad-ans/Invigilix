@@ -73,21 +73,10 @@ class ExamService(AuthoringService):
             pinned = {i.question_id: i.version_id for i in exam.items}
             items, issues = [], []
             for slot, request in enumerate(requests, start=1):
-                marks, issue = parse_marks(request.max_marks, "max_marks")
-                if issue:
-                    issues.append(issue.located(item=slot))
-                question = uow.questions.get(request.question_id)
-                if question is None or not question.owned_by(actor.id):
-                    issues.append(Issue("question_unavailable", "This question is not in your bank.",
-                                        field="question_id", item=slot))
-                    continue
-                version_id = request.version_id or pinned.get(question.id) or question.latest.id
-                if question.version(version_id) is None:
-                    issues.append(Issue("unknown_version", "That version does not belong to this "
-                                        "question.", field="version_id", item=slot))
-                    continue
-                if marks is not None:
-                    items.append(PaperItem(slot, question.id, version_id, marks))
+                item, slot_issues = self._resolve_slot(uow, actor, slot, request, pinned)
+                issues.extend(slot_issues)
+                if item is not None:
+                    items.append(item)
             if issues:
                 raise ValidationFailed(issues)
             exam.assign(items)
@@ -118,6 +107,32 @@ class ExamService(AuthoringService):
             view = self._overview(uow, exam)
             uow.commit()
             return view
+
+    @staticmethod
+    def _resolve_slot(uow: UnitOfWork, actor: Actor, slot: int, request: SlotRequest,
+                      pinned: dict[UUID, UUID]) -> tuple[PaperItem | None, list[Issue]]:
+        """Turn one slot request into a pinned item, or the reasons it cannot be one.
+
+        Version choice: an explicit ``version_id`` wins; otherwise an existing
+        assignment keeps its pin (FR04); otherwise the bank's latest version.
+        """
+        issues: list[Issue] = []
+        marks, marks_issue = parse_marks(request.max_marks, "max_marks")
+        if marks_issue:
+            issues.append(marks_issue.located(item=slot))
+        question = uow.questions.get(request.question_id)
+        if question is None or not question.owned_by(actor.id):
+            issues.append(Issue("question_unavailable", "This question is not in your bank.",
+                                field="question_id", item=slot))
+            return None, issues
+        version_id = request.version_id or pinned.get(question.id) or question.latest.id
+        if question.version(version_id) is None:
+            issues.append(Issue("unknown_version", "That version does not belong to this question.",
+                                field="version_id", item=slot))
+            return None, issues
+        if marks is None:
+            return None, issues
+        return PaperItem(slot, question.id, version_id, marks), issues
 
     # -- handoff to delivery ---------------------------------------------------
     def frozen_paper(self, exam_id: UUID) -> FrozenPaper:

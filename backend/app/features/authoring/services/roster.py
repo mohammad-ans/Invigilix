@@ -3,28 +3,10 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from ..domain import (
-    Conflict, EntryDecision, EntryPolicy, Enrollment, Exam, ExamState, Issue, NotFound,
-    ValidationFailed,
-)
+from ..domain import EntryDecision, EntryPolicy, Exam, Issue, NotFound, ValidationFailed
 from ..ports import CANDIDATE, EXAMINER, Actor, UnitOfWork
 from .base import AuthoringService, IdFactory, UnitOfWorkFactory
 from .views import CandidateExamEntry, RosterEntry, RosterView
-
-
-def candidate_issue(uow: UnitOfWork, email: str, field: str) -> tuple[object, Issue | None]:
-    """Resolve an email to an enrollable candidate or explain why it is not one."""
-    account = uow.accounts.by_email(email) if email.strip() else None
-    if not email.strip():
-        return None, Issue("required", "Enter the candidate's email.", field=field)
-    if account is None:
-        return None, Issue("unknown_candidate", "No account uses this email.", field=field)
-    if not account.is_candidate:
-        return None, Issue("not_candidate", "This account does not hold the candidate role.",
-                           field=field)
-    if not account.enabled:
-        return None, Issue("account_disabled", "This account is disabled.", field=field)
-    return account, None
 
 
 class RosterService(AuthoringService):
@@ -44,19 +26,21 @@ class RosterService(AuthoringService):
         self._require(actor, EXAMINER)
         with self._uow() as uow:
             exam = self._owned_exam(uow, actor, exam_id, lock=True)
-            self.ensure_roster_open(exam, uow)
+            exam.ensure_roster_open(uow.now())
             issues, accounts = [], []
             for index, email in enumerate(emails, start=1):
-                account, issue = candidate_issue(uow, email, "candidate_email")
-                if issue:
-                    issues.append(issue.located(row=index))
-                elif account not in accounts:
+                try:
+                    account = self._enrollable_candidate(uow, email)
+                except ValidationFailed as refused:
+                    issues.extend(i.located(row=index) for i in refused.issues)
+                    continue
+                if account not in accounts:
                     accounts.append(account)
             if issues or not accounts:
                 raise ValidationFailed(issues or [Issue("required", "Enter at least one email.",
                                                         field="candidate_email")])
             for account in accounts:
-                self.admit(uow, exam, account.id, actor.id)
+                self._admit(uow, exam, account.id, actor.id)
             view = self._view(uow, exam)
             uow.commit()
             return view
@@ -67,11 +51,11 @@ class RosterService(AuthoringService):
         self._require(actor, EXAMINER)
         with self._uow() as uow:
             exam = self._owned_exam(uow, actor, exam_id, lock=True)
-            self.ensure_roster_open(exam, uow)
+            exam.ensure_roster_open(uow.now())
             enrollment = uow.enrollments.get(exam.id, candidate_id)
             if enrollment is None:
                 raise NotFound("Enrollment")
-            enrollment.active = active
+            enrollment.set_active(active)
             uow.enrollments.save(enrollment)
             view = self._view(uow, exam)
             uow.commit()
@@ -104,24 +88,6 @@ class RosterService(AuthoringService):
             if not decision.visible_to_candidate:
                 raise NotFound("Exam")
             return decision
-
-    # -- shared helpers (also used by the roster CSV import) --------------------
-    @staticmethod
-    def ensure_roster_open(exam: Exam, uow: UnitOfWork) -> None:
-        if exam.state_at(uow.now()) is ExamState.COMPLETED:
-            raise Conflict("exam_closed", "The exam has closed. Its roster is now a record.")
-
-    @staticmethod
-    def admit(uow: UnitOfWork, exam: Exam, candidate_id: UUID, by: UUID) -> str:
-        existing = uow.enrollments.get(exam.id, candidate_id)
-        if existing is None:
-            uow.enrollments.add(Enrollment(exam.id, candidate_id, by))
-            return "created"
-        if not existing.active:
-            existing.active = True
-            uow.enrollments.save(existing)
-            return "updated"
-        return "unchanged"
 
     def _view(self, uow: UnitOfWork, exam: Exam) -> RosterView:
         now = uow.now()

@@ -199,3 +199,35 @@ class TestEntryPolicy:
         assert self.decide(during, account=examiner).access is Access.NOT_CANDIDATE
         self.enrollment.active = False
         assert self.decide(during).access is Access.ENROLLMENT_INACTIVE
+
+
+class TestRosterRulesLiveOnTheEntities:
+    """Admission and roster-closure are entity behaviour, shared by service and import."""
+
+    def test_admission_predicts_the_change(self):
+        from app.features.authoring.domain import Change
+
+        assert Enrollment.admission(None) is Change.CREATED
+        withdrawn = Enrollment(uuid4(), uuid4(), uuid4(), active=False)
+        assert Enrollment.admission(withdrawn) is Change.UPDATED
+        assert withdrawn.set_active(True) is Change.UPDATED and withdrawn.active
+        assert Enrollment.admission(withdrawn) is Change.UNCHANGED
+        assert withdrawn.set_active(True) is Change.UNCHANGED
+
+    def test_roster_closes_with_the_window(self):
+        exam, bank = paper_exam()
+        exam.publish(OPENS - timedelta(days=1), bank, PublicationPolicy())
+        exam.ensure_roster_open(OPENS + timedelta(minutes=5))
+        with pytest.raises(Conflict) as caught:
+            exam.ensure_roster_open(CLOSES)
+        assert caught.value.code == "exam_closed"
+
+
+def test_import_report_records_typed_changes():
+    from app.features.authoring.domain import Change
+    from app.features.authoring.services import ImportReport
+
+    report = ImportReport(rows=4)
+    for change in (Change.CREATED, Change.CREATED, Change.UPDATED, Change.UNCHANGED):
+        report.record(change)
+    assert (report.created, report.updated, report.unchanged) == (2, 1, 1)

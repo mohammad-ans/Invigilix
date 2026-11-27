@@ -7,6 +7,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from .exam import Exam, ExamState
+from .values import Change
 
 CANDIDATE_ROLE = "candidate"
 
@@ -28,10 +29,25 @@ class AccountRecord:
 
 @dataclass
 class Enrollment:
+    """A candidate's place on one exam's roster. Withdrawn, never deleted."""
+
     exam_id: UUID
     candidate_id: UUID
     enrolled_by: UUID
     active: bool = True
+
+    @staticmethod
+    def admission(existing: "Enrollment | None") -> Change:
+        """What admitting this candidate would change. Planning and execution share it."""
+        if existing is None:
+            return Change.CREATED
+        return Change.UNCHANGED if existing.active else Change.UPDATED
+
+    def set_active(self, active: bool) -> Change:
+        if self.active == active:
+            return Change.UNCHANGED
+        self.active = active
+        return Change.UPDATED
 
 
 class Access(StrEnum):

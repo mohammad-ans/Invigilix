@@ -28,6 +28,14 @@ class MarkingRule(StrEnum):
     MANUAL = "manual"
 
 
+class Change(StrEnum):
+    """What a write did to a record. Reported back so reruns can prove idempotence."""
+
+    CREATED = "created"
+    UPDATED = "updated"
+    UNCHANGED = "unchanged"
+
+
 class Difficulty(StrEnum):
     EASY = "easy"
     MEDIUM = "medium"

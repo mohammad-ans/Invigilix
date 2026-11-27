@@ -17,12 +17,11 @@ from typing import Any, Callable, Hashable
 from uuid import UUID
 
 from ..domain import (
-    AnswerOption, Difficulty, Exam, Issue, MarkingRule, Question, QuestionContent, QuestionKind,
-    ValidationFailed,
+    AnswerOption, Change, Difficulty, Enrollment, Exam, Issue, MarkingRule, Question,
+    QuestionContent, QuestionKind, ValidationFailed,
 )
 from ..ports import ADMIN, EXAMINER, Actor, UnitOfWork
 from .base import AuthoringService
-from .roster import RosterService, candidate_issue
 
 MAX_ROWS = 5000
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -85,7 +84,7 @@ class RowPlan:
     """What committing one row will do. ``apply`` runs only if every row is valid."""
 
     key: Hashable
-    action: str  # created | updated | unchanged
+    change: Change
     apply: Callable[[UnitOfWork], Any] = lambda uow: None
 
 
@@ -98,6 +97,14 @@ class ImportReport:
     committed: bool = False
     issues: list[Issue] = field(default_factory=list)
     credentials: list[tuple[str, str]] = field(default_factory=list)
+
+    def record(self, change: Change) -> None:
+        if change is Change.CREATED:
+            self.created += 1
+        elif change is Change.UPDATED:
+            self.updated += 1
+        else:
+            self.unchanged += 1
 
 
 class CsvImport(AuthoringService, ABC):
@@ -130,7 +137,7 @@ class CsvImport(AuthoringService, ABC):
                 plans.append(plan)
             report = ImportReport(len(table.rows), issues=issues)
             for plan in plans:
-                setattr(report, plan.action, getattr(report, plan.action) + 1)
+                report.record(plan.change)
             if issues:
                 if commit:
                     raise ValidationFailed(issues, "No rows were imported. Fix the listed rows "
@@ -233,18 +240,18 @@ class QuestionImport(CsvImport):
         content = question_content_from_row(row)
         existing = uow.questions.get(question_id, lock=True)
         if existing is None:
-            return RowPlan(question_id, "created", lambda u: u.questions.add(
+            return RowPlan(question_id, Change.CREATED, lambda u: u.questions.add(
                 Question.create(question_id, actor.id, self._ids(), content)))
         if not existing.owned_by(actor.id):
             raise ValidationFailed([Issue("id_in_use", "This question ID is already in use.",
                                           field="question_id")])
         if existing.latest.content == content:
-            return RowPlan(question_id, "unchanged")
+            return RowPlan(question_id, Change.UNCHANGED)
 
         def revise(u: UnitOfWork) -> None:
             version, _ = existing.revise(self._ids(), content)
             u.questions.append_version(existing, version)
-        return RowPlan(question_id, "updated", revise)
+        return RowPlan(question_id, Change.UPDATED, revise)
 
 
 # --------------------------------------------------------------------------- roster
@@ -259,17 +266,13 @@ class RosterImport(CsvImport):
 
     def open_scope(self, uow, actor, *, exam_id: UUID) -> Exam:
         exam = self._owned_exam(uow, actor, exam_id, lock=True)
-        RosterService.ensure_roster_open(exam, uow)
+        exam.ensure_roster_open(uow.now())
         return exam
 
     def plan(self, uow, actor, exam: Exam, row):
-        account, issue = candidate_issue(uow, row.get("candidate_email"), "candidate_email")
-        if issue:
-            raise ValidationFailed([issue])
-        current = uow.enrollments.get(exam.id, account.id)
-        action = ("created" if current is None else "unchanged" if current.active else "updated")
-        return RowPlan(account.id, action,
-                       lambda u: RosterService.admit(u, exam, account.id, actor.id))
+        account = self._enrollable_candidate(uow, row.get("candidate_email"))
+        change = Enrollment.admission(uow.enrollments.get(exam.id, account.id))
+        return RowPlan(account.id, change, lambda u: self._admit(u, exam, account.id, actor.id))
 
 
 # --------------------------------------------------------------------------- candidates
@@ -298,8 +301,8 @@ class CandidateImport(CsvImport):
             if not existing.is_candidate:
                 raise ValidationFailed([Issue("email_in_use", "This email belongs to a "
                                               "non-candidate account.", field="email")])
-            return RowPlan(key, "unchanged")
-        return RowPlan(key, "created", lambda u: u.accounts.provision_candidate(email, name))
+            return RowPlan(key, Change.UNCHANGED)
+        return RowPlan(key, Change.CREATED, lambda u: u.accounts.provision_candidate(email, name))
 
     def collect(self, report, outcome):
         if outcome is not None:
