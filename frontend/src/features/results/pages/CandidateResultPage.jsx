@@ -7,6 +7,7 @@ import {
 } from "../components/primitives.jsx";
 import { formatDateTime } from "../domain/rules.js";
 import { paths } from "../paths.js";
+import { RedPenMark, VerificationStub } from "../components/instruments.jsx";
 
 export default function CandidateResultPage({ api, params, navigate }) {
   const attemptId = params?.id;
@@ -125,31 +126,6 @@ export default function CandidateResultPage({ api, params, navigate }) {
           <StatusPill tone="sage" glyph="✓" label={`Closed (${result.close_reason})`} />
         </div>
 
-        <div className="res-rubric">
-          <span className="mini">Report authenticity record</span>
-          <p style={{ margin: "6px 0" }}>
-            Verification code: <code className="res-mono">{result.verification_code}</code>{" "}
-            <button type="button" className="quiet" onClick={handleCopyCode}>
-              {copied ? "Copied" : "Copy code"}
-            </button>
-          </p>
-          <p className="res-muted">
-            PDF SHA-256: <code className="res-mono">{result.sha256_hex}</code>
-          </p>
-          <p style={{ marginTop: 8 }}>
-            <a
-              href={"#" + paths.verify}
-              className="quiet"
-              onClick={e => {
-                if (!navigate) return;
-                e.preventDefault();
-                navigate(paths.verify);
-              }}
-            >
-              Verify report authenticity →
-            </a>
-          </p>
-        </div>
       </section>
 
       <div className="res-stack">
@@ -164,7 +140,7 @@ export default function CandidateResultPage({ api, params, navigate }) {
                 label={`${item.awarded_marks} / ${item.max_marks} marks`}
               />
             </div>
-            <h2 className="question">{item.prompt}</h2>
+            <div className="res-transcript-q"><h2 className="question">{item.prompt}</h2><RedPenMark awarded={item.awarded_marks} cap={item.max_marks} /></div>
             {item.kind === "written" ? (
               <div className="res-answer-box">
                 {item.written_answer?.trim() ? item.written_answer : <span className="res-muted">No written response submitted.</span>}
@@ -181,6 +157,10 @@ export default function CandidateResultPage({ api, params, navigate }) {
           </article>
         ))}
       </div>
+
+      <VerificationStub code={result.verification_code} digest={result.sha256_hex} releasedAt={result.results_published_at}
+        copied={copied} onCopy={handleCopyCode} verifyHref={"#" + paths.verify}
+        onVerify={e => { if (!navigate) return; e.preventDefault(); navigate(paths.verify); }} />
     </main>
   );
 }

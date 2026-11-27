@@ -1,3 +1,5 @@
+import { MarkChips, RedPenMark } from "../components/instruments.jsx";
+import { markSteps } from "../domain/visuals.js";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   Banner,
@@ -77,7 +79,8 @@ function WrittenResponseCard({ api, item, frozen, onGraded }) {
         </div>
       )}
 
-      <div className="res-answer-box" aria-label="Candidate written response">
+      <div className="res-answer-box res-script" aria-label="Candidate written response">
+        <RedPenMark awarded={item.awarded_marks} cap={item.max_marks} />
         {isBlank ? <span className="res-muted">Blank response (auto-scored 0.00 at finalization).</span> : item.written_answer}
       </div>
 
@@ -116,6 +119,9 @@ function WrittenResponseCard({ api, item, frozen, onGraded }) {
             {saveState === "error" && <SaveStatus state="error">Save failed</SaveStatus>}
           </div>
         </div>
+
+        <MarkChips steps={markSteps(item.max_marks)} value={draft} disabled={frozen || saveState === "saving"}
+          onPick={v => { setDraft(v); setIssue(null); setSaveState("idle"); }} />
 
         {issue && (
           <p id={`${inputId}-err`} className="res-field-error" role="alert" style={{ marginTop: 8 }}>

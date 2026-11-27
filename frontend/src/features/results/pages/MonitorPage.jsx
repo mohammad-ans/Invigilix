@@ -15,6 +15,10 @@ import {
   isFeedStale,
   validateAnnouncementInput,
 } from "../domain/rules.js";
+import { SeatingPlan } from "../components/instruments.jsx";
+
+const VIEW_KEY = "folio.results.monitorView";
+const readView = () => { try { return localStorage.getItem(VIEW_KEY) === "seats" ? "seats" : "register"; } catch { return "register"; } };
 
 function two(n) {
   return String(n).padStart(2, "0");
@@ -32,6 +36,8 @@ export default function MonitorPage({ api, params, navigate, pollMs = 8000 }) {
   const [message, setMessage] = useState("");
   const [formIssue, setFormIssue] = useState(null);
   const [postState, setPostState] = useState("idle");
+  const [view, setView] = useState(readView);
+  const chooseView = next => { setView(next); try { localStorage.setItem(VIEW_KEY, next); } catch { /* storage may be blocked */ } };
 
   const load = useCallback(async ({ background = false } = {}) => {
     if (!background) setLoading(true);
@@ -171,7 +177,14 @@ export default function MonitorPage({ api, params, navigate, pollMs = 8000 }) {
             </div>
           </div>
 
-          {data.roster.length === 0 ? (
+          {data.roster.length > 0 && (
+            <div className="res-viewswitch" role="group" aria-label="Roster view">
+              <button type="button" className="res-chip" aria-pressed={view === "register"} onClick={() => chooseView("register")}>Register</button>
+              <button type="button" className="res-chip" aria-pressed={view === "seats"} onClick={() => chooseView("seats")}>Seating plan</button>
+            </div>
+          )}
+
+          {data.roster.length > 0 && view === "seats" ? <SeatingPlan roster={data.roster} /> : data.roster.length === 0 ? (
             <EmptyPanel
               title="No enrolled candidates yet"
               detail="Enrolled candidates and live attempt progress appear here once candidates are assigned."
