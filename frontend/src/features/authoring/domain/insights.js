@@ -50,3 +50,28 @@ export function paperProfile(slots) {
 }
 
 export const percent = value => `${Math.round(value * 100)}%`;
+
+const DAY = 864e5;
+
+/**
+ * Exam timetable rows for `days` days from the start of `now`'s day.
+ * Each row places the window as left/width percentages and notes clipping.
+ */
+export function timetable(exams, now = new Date(), days = 14) {
+  const start = new Date(now); start.setHours(0, 0, 0, 0);
+  const from = start.getTime(), to = from + days * DAY, span = to - from;
+  const rows = exams
+    .map(e => ({ exam: e, opens: Date.parse(e.opens_at), closes: Date.parse(e.closes_at) }))
+    .filter(r => r.closes > from && r.opens < to)
+    .sort((a, b) => a.opens - b.opens)
+    .map(r => {
+      const a = Math.max(r.opens, from), b = Math.min(r.closes, to);
+      return { ...r, left: (100 * (a - from)) / span, width: (100 * (b - a)) / span,
+        clippedStart: r.opens < from, clippedEnd: r.closes > to };
+    });
+  const columns = Array.from({ length: days }, (_, i) => {
+    const d = new Date(from + i * DAY);
+    return { date: d, weekend: d.getDay() === 0 || d.getDay() === 6, today: i === 0 };
+  });
+  return { rows, columns, nowLeft: (100 * (now.getTime() - from)) / span, hidden: exams.length - rows.length };
+}

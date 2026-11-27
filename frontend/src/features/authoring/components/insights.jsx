@@ -1,7 +1,7 @@
 import React from "react";
-import { paperProfile, percent, windowPlan } from "../domain/insights.js";
+import { paperProfile, percent, timetable, windowPlan } from "../domain/insights.js";
 import { centsToMarks } from "../domain/rules.js";
-import { formatDuration, KIND } from "../domain/format.js";
+import { formatDuration, formatWindow, KIND, STATE } from "../domain/format.js";
 
 const time = iso => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
@@ -66,4 +66,36 @@ export function PaperProfile({ slots }) {
       </li>)}</ul>
     </div>
   </div>;
+}
+
+/**
+ * Exam timetable: a fortnight of ruled day columns, weekends shaded, a red
+ * "now" line, and each exam window drawn as a bar in its state's style.
+ * Every bar is also a link with its title and window in text.
+ */
+export function ExamTimetable({ exams, onOpen, now = new Date(), days = 14 }) {
+  const t = timetable(exams, now, days);
+  return <section className="au-timetable" aria-labelledby="timetable-title">
+    <div className="split"><h2 id="timetable-title" className="au-subhead">Exam timetable · next {days} days</h2>
+      {t.hidden > 0 && <span className="au-sub">{t.hidden} outside this fortnight</span>}</div>
+    <div className="au-timetable__grid">
+      <div className="au-timetable__days" aria-hidden="true">
+        {t.columns.map((c, i) => <span key={i} className={`${c.weekend ? "we" : ""}${c.today ? " today" : ""}`}>
+          <b>{c.date.toLocaleDateString(undefined, { weekday: "narrow" })}</b>{c.date.getDate()}</span>)}
+      </div>
+      <div className="au-timetable__rows">
+        <div className="au-timetable__ruling" aria-hidden="true">{t.columns.map((c, i) => <i key={i} className={c.weekend ? "we" : ""} />)}</div>
+        <span className="au-timetable__now" style={{ left: `${t.nowLeft}%` }} aria-hidden="true"><em>now</em></span>
+        {t.rows.length === 0 && <p className="au-sub au-timetable__none">No exam windows in the next {days} days.</p>}
+        <ul>{t.rows.map(r => <li key={r.exam.id}>
+          <a href="#" className={`au-timetable__bar au-timetable__bar--${r.exam.state}`} style={{ marginLeft: `${r.left}%`, width: `max(${r.width}%, 8px)` }}
+            onClick={e => { e.preventDefault(); onOpen(r.exam); }}>
+            <span className="sr-only">{r.exam.title}, {STATE[r.exam.state]?.label}, {formatWindow(r.exam.opens_at, r.exam.closes_at)}</span>
+          </a>
+          <span className="au-timetable__label" style={{ marginLeft: `min(${r.left}%, calc(100% - 180px))` }} aria-hidden="true">
+            <b>{r.exam.title}</b> {formatWindow(r.exam.opens_at, r.exam.closes_at)}</span>
+        </li>)}</ul>
+      </div>
+    </div>
+  </section>;
 }

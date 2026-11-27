@@ -25,3 +25,20 @@ test("profile weights by marks and splits automatic from examiner marking", () =
   assert.deepEqual(p.difficulty.map(g => g.share), [0.2, 0.4, 0.4]);
   assert.deepEqual(p.topics.map(t => [t.key, t.share]), [["Sampling", 0.8], ["Ecology", 0.2]]);
 });
+
+test("timetable places windows inside a fortnight and clips the edges", async () => {
+  const { timetable } = await import("../../../frontend/src/features/authoring/domain/insights.js");
+  const now = new Date("2026-11-27T12:00:00");
+  const e = (id, o, c) => ({ id, opens_at: new Date(o).toISOString(), closes_at: new Date(c).toISOString() });
+  const t = timetable([
+    e("a", "2026-11-28T00:00:00", "2026-11-29T00:00:00"),
+    e("old", "2026-11-01T10:00:00", "2026-11-01T11:00:00"),
+    e("span", "2026-11-20T00:00:00", "2026-11-28T00:00:00"),
+  ], now, 14);
+  assert.deepEqual(t.rows.map(r => r.exam.id), ["span", "a"]);
+  assert.equal(t.hidden, 1);
+  const a = t.rows.find(r => r.exam.id === "a");
+  assert.ok(Math.abs(a.left - 100 / 14) < 1e-9 && Math.abs(a.width - 100 / 14) < 1e-9);
+  assert.equal(t.rows[0].clippedStart, true);
+  assert.equal(t.columns.length, 14);
+});

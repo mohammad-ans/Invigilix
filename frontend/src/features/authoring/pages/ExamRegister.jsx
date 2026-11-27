@@ -6,6 +6,7 @@ import { formatDuration, formatMarks, formatWindow, two, STATE } from "../domain
 import { Dialog } from "../components/instruments.jsx";
 import { ExamForm, blankDetails } from "../components/ExamForm.jsx";
 import { LedgerArt } from "../components/illustrations.jsx";
+import { ExamTimetable } from "../components/insights.jsx";
 import { EmptyState, Loading, LoadError, ModeLabel, StateBadge, Stat } from "../components/primitives.jsx";
 
 const FILTERS = ["all", "draft", "scheduled", "ongoing", "completed"];
@@ -35,6 +36,8 @@ export default function ExamRegister({ api, navigate }) {
       <div className="summary-grid au-summary-4">
         {FILTERS.slice(1).map(s => <Stat key={s} label={STATE[s].label} value={two(counts[s])} />)}
       </div>
+
+      {counts.all > 0 && <ExamTimetable exams={exams.data} onOpen={e => navigate(paths.edit(e.id))} />}
 
       <div className="au-filters" role="group" aria-label="Show exams by state">
         {FILTERS.map(f => <button key={f} type="button" className="au-chip" aria-pressed={filter === f} onClick={() => setFilter(f)}>
