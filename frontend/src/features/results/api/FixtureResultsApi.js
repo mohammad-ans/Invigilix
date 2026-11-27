@@ -217,7 +217,7 @@ export class FixtureResultsApi {
         release_blockers: [
           {
             code: "grading_incomplete",
-            message: "Attempt att-sana slot 3 still awaits a manual grade.",
+            message: "Sana Ali · slot 3 still awaits a manual grade.",
             field: "awarded_marks",
             item: 3,
           },
@@ -299,8 +299,9 @@ export class FixtureResultsApi {
             skip_rate: 0,
             skip_rate_display: "0/2",
             graded_exposure_count: 2,
-            observed_facility: "0.75",
-            facility_display: "0.75",
+            // Nora 2.00/4 (partial, no wrong choice) and Sana 0 (wrong choice): (0.50 + 0) / 2.
+            observed_facility: "0.25",
+            facility_display: "0.25",
             common_incorrect_selections: [
               { option_no: 3, label: "Air temperature alone", count: 1, exposure_count: 2 },
             ],

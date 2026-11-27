@@ -110,6 +110,12 @@ class CandidateResultView:
     items: tuple[CandidateResultItemView, ...]
 
 
+def _attempt_labels(attempts, accounts) -> dict[UUID, str]:
+    """Candidate display names keyed by attempt, for examiner-facing messages."""
+    return {a.id: accounts[a.candidate_id].display_name
+            for a in attempts if a.candidate_id in accounts}
+
+
 class ResultsService:
     """Owner review/release and candidate own-result queries (FR12, SR05, AT07, AT08)."""
 
@@ -130,13 +136,14 @@ class ResultsService:
         reports_by_attempt = uow.reports.for_exam(exam.id)
 
         finalized = [a for a in attempts if a.finalized_at is not None]
-        accounts = uow.accounts.by_ids(a.candidate_id for a in finalized)
+        accounts = uow.accounts.by_ids(a.candidate_id for a in attempts)
 
         summary = compute_class_summary(enrollments, attempts, items_by_attempt)
         analytics = compute_question_analytics(paper, finalized, items_by_attempt)
         blockers = tuple(
             ReleaseBlockerView(b.code, b.message, b.field, b.item)
-            for b in release_blockers(exam, attempts, items_by_attempt, now)
+            for b in release_blockers(exam, attempts, items_by_attempt, now,
+                                      _attempt_labels(attempts, accounts))
         )
 
         attempt_rows: list[CandidateAttemptScoreView] = []
@@ -204,10 +211,11 @@ class ResultsService:
             now = uow.now()
             attempts = uow.attempts.for_exam(exam.id)
             items_by_attempt = uow.attempts.items_for_exam(exam.id)
-            require_release_ready(exam, attempts, items_by_attempt, now)
+            accounts = uow.accounts.by_ids(a.candidate_id for a in attempts)
+            require_release_ready(exam, attempts, items_by_attempt, now,
+                                  _attempt_labels(attempts, accounts))
 
             paper = {spec.slot: spec for spec in uow.exams.paper_items(exam.id)}
-            accounts = uow.accounts.by_ids(a.candidate_id for a in attempts)
             published_exam = uow.exams.set_results_published(exam.id, now)
 
             for att in attempts:

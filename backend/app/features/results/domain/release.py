@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import secrets
 from datetime import datetime
-from typing import Iterable
+from typing import Iterable, Mapping
 from uuid import UUID
 
 from .errors import Conflict, Issue
@@ -30,9 +30,15 @@ def release_blockers(
     attempts: Iterable[AttemptRecord],
     items_by_attempt: dict[UUID, list[AttemptItemRecord]],
     now: datetime,
+    labels: Mapping[UUID, str] | None = None,
 ) -> list[Issue]:
-    """Return every unmet condition preventing result release for ``exam``."""
+    """Return every unmet condition preventing result release for ``exam``.
+
+    ``labels`` maps attempt IDs to the candidate's display name so the examiner
+    reads "Sana Ali · slot 3" instead of an opaque attempt UUID.
+    """
     issues: list[Issue] = []
+    name = lambda attempt_id: (labels or {}).get(attempt_id) or f"Attempt {attempt_id}"
     if exam.published_at is None:
         issues.append(Issue("exam_not_published", "Exam has not been published yet."))
         return issues
@@ -74,7 +80,7 @@ def release_blockers(
             issues.append(
                 Issue(
                     "grading_incomplete",
-                    f"Attempt {a.id} has no assigned items to grade.",
+                    f"{name(a.id)} has no assigned items to grade.",
                 )
             )
             continue
@@ -83,7 +89,7 @@ def release_blockers(
                 issues.append(
                     Issue(
                         "grading_incomplete",
-                        f"Attempt {a.id} slot {it.slot} still awaits a manual grade.",
+                        f"{name(a.id)} · slot {it.slot} still awaits a manual grade.",
                         field="awarded_marks",
                         item=it.slot,
                     )
@@ -97,9 +103,10 @@ def require_release_ready(
     attempts: Iterable[AttemptRecord],
     items_by_attempt: dict[UUID, list[AttemptItemRecord]],
     now: datetime,
+    labels: Mapping[UUID, str] | None = None,
 ) -> None:
     """Raise Conflict if any FR12 release gate fails."""
-    issues = release_blockers(exam, attempts, items_by_attempt, now)
+    issues = release_blockers(exam, attempts, items_by_attempt, now, labels)
     if issues:
         primary = issues[0]
         raise Conflict(primary.code, primary.message, issues)

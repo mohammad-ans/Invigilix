@@ -179,3 +179,43 @@ def test_release_blockers_cover_close_finalization_and_pending_grades():
         att.id: [AttemptItemRecord(att.id, exam.id, 1, uuid4(), 1, "answer", False, 1, None, Decimal("3.00"), exam.owner_id)]
     }
     assert release_blockers(exam, [att_done], items_graded, closes) == []
+
+
+def test_release_blockers_name_the_candidate_not_the_attempt_id():
+    """Examiner-facing blockers read "Sana Ali · slot 3", falling back to the ID."""
+    from datetime import datetime, timezone
+    from decimal import Decimal
+    from uuid import uuid4
+
+    from backend.app.features.results.domain import release_blockers
+    from backend.app.features.results.domain.values import AttemptItemRecord, AttemptRecord, ExamRecord
+
+    import dataclasses
+    now = datetime(2026, 11, 27, 12, 0, tzinfo=timezone.utc)
+
+    def build(cls, **known):
+        values = {}
+        for f in dataclasses.fields(cls):
+            if f.name in known:
+                values[f.name] = known[f.name]
+            elif f.default is not dataclasses.MISSING or f.default_factory is not dataclasses.MISSING:
+                continue
+            else:
+                values[f.name] = None
+        return cls(**values)
+
+    exam = build(ExamRecord, id=uuid4(), owner_id=uuid4(), title="Field ecology",
+                 opens_at=now.replace(hour=10), closes_at=now.replace(hour=11),
+                 published_at=now.replace(hour=9), results_published_at=None,
+                 total_marks=Decimal("10.00"))
+    attempt = build(AttemptRecord, id=uuid4(), exam_id=exam.id, candidate_id=uuid4(),
+                    started_at=now.replace(hour=10), deadline_at=now.replace(hour=11),
+                    finalized_at=now.replace(hour=10, minute=50), close_reason="submitted")
+    item = build(AttemptItemRecord, attempt_id=attempt.id, slot=3, version_id=uuid4(),
+                 display_no=3, written_answer="Because…", flagged=False, answer_revision=1,
+                 saved_at=now, awarded_marks=None, graded_by=None, options=())
+    named = release_blockers(exam, [attempt], {attempt.id: [item]}, now, {attempt.id: "Sana Ali"})
+    assert [(b.code, b.message, b.item) for b in named] == [
+        ("grading_incomplete", "Sana Ali · slot 3 still awaits a manual grade.", 3)]
+    unnamed = release_blockers(exam, [attempt], {attempt.id: [item]}, now)
+    assert unnamed[0].message.startswith(f"Attempt {attempt.id}")

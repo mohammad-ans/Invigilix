@@ -153,7 +153,7 @@ export default function ResultsPage({ api, params, navigate }) {
 
         <div className="res-cards-grid">
           <div className="stat">
-            <span className="mini">Enrolled / Finalized</span>
+            <span className="mini">Finalized / enrolled</span>
             <strong>{s.finalized_count} / {s.enrolled_count}</strong>
           </div>
           <div className="stat">
