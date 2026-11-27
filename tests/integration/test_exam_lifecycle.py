@@ -1,18 +1,13 @@
 """Cross-feature acceptance against PostgreSQL. Each run owns a new empty schema."""
 import hashlib
-import os
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
-import psycopg
 import pytest
 from fastapi.testclient import TestClient
-from psycopg import sql
-from sqlalchemy.engine import make_url
 
 from backend.app.main import create_app
 from backend.app.platform.bootstrap import first_admin
-from backend.app.platform.database import database_engine, transactions
+from backend.app.platform.database import transactions
 from backend.app.platform.identity import COOKIE, NewAccount
 from backend.app.platform.migrate import upgrade
 
@@ -21,30 +16,14 @@ PASSWORD = "test-only-phrase-4286"
 
 
 @pytest.fixture
-def office(monkeypatch):
-    dsn = os.getenv("FOLIO_TEST_DSN")
-    if not dsn:
-        pytest.skip("Set FOLIO_TEST_DSN to a disposable PostgreSQL database")
-    schema = "integration_" + uuid4().hex
-    with psycopg.connect(dsn, autocommit=True) as setup:
-        setup.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
-    url = make_url(dsn).update_query_dict({"options": "-csearch_path=" + schema})
-    monkeypatch.setenv("DATABASE_URL", url.render_as_string(hide_password=False))
+def office(monkeypatch, isolated_database):
     monkeypatch.setenv("PUBLIC_ORIGIN", ORIGIN)
-    engine = database_engine()
-    try:
-        upgrade(engine)
-        upgrade(engine)
-        connect = transactions(engine)
-        first_admin(connect, NewAccount(email="admin@example.test", display_name="Registrar",
-                                        roles={"admin"}, password=PASSWORD))
-        app = create_app()
-        with TestClient(app, base_url=ORIGIN, headers={"Origin": ORIGIN}) as client:
-            yield client, connect
-    finally:
-        engine.dispose()
-        with psycopg.connect(dsn, autocommit=True) as setup:
-            setup.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
+    upgrade(isolated_database)
+    connect = transactions(isolated_database)
+    first_admin(connect, NewAccount(email="admin@example.test", display_name="Registrar",
+                                    roles={"admin"}, password=PASSWORD))
+    with TestClient(create_app(), base_url=ORIGIN, headers={"Origin": ORIGIN}) as client:
+        yield client, connect
 
 
 def test_publish_sit_grade_release(office):

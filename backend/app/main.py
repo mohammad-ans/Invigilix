@@ -2,9 +2,10 @@ import os
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from .features import results
 from .features.authoring.adapters.sql import SqlDatabase
@@ -14,6 +15,7 @@ from .features.delivery.router import create_router as delivery_router
 from .features.delivery.worker import expiry_worker
 from .platform.database import database_engine, transactions
 from .platform.identity import HASHER, Identity, role_dependencies
+from .platform.security import install_request_security
 
 
 def create_app():
@@ -38,15 +40,16 @@ def create_app():
     app = FastAPI(title="Folio Examination Office", lifespan=lifespan,
                   docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
 
-    @app.middleware("http")
-    async def secure_api(request: Request, call_next):
-        if request.method not in {"GET", "HEAD", "OPTIONS"} and request.headers.get("origin") != origin:
-            response = JSONResponse({"detail": "Request origin is not permitted."}, 403)
-        else:
-            response = await call_next(request)
-        response.headers["Cache-Control"] = "private, no-store"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        return response
+    install_request_security(app, origin)
+
+    @app.get("/api/health", responses={503: {"description": "Database unavailable or schema missing"}})
+    def health():
+        try:
+            with engine.connect() as connection:
+                connection.exec_driver_sql("SELECT id FROM account LIMIT 0")
+        except SQLAlchemyError:
+            return JSONResponse({"status": "unavailable"}, 503)
+        return {"status": "ok"}
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, error):

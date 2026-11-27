@@ -1,0 +1,7 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "tools/railway/Dockerfile"
+
+[deploy]
+preDeployCommand = ["python -m backend.migrations.predeploy"]
+healthcheckPath = "/api/health"
