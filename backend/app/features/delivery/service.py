@@ -2,7 +2,7 @@
 
 Connections use psycopg's dict_row factory. score_objective is supplied by results.
 """
-from datetime import timedelta
+from datetime import timedelta, timezone
 from random import SystemRandom
 from uuid import uuid4
 
@@ -110,10 +110,15 @@ def start(db, account_id, exam_id, score):
 
 def lock_owned(db, account_id, attempt_id):
     account = candidate(db, account_id)
+    eligible = db.execute("""
+        SELECT 1 FROM attempt a JOIN enrollment n USING (exam_id,candidate_id)
+        WHERE a.id=%s AND a.candidate_id=%s AND n.active FOR SHARE OF n
+    """, (attempt_id, account_id)).fetchone()
+    if not eligible:
+        fail(404, "unavailable")
     attempt = db.execute("""
-        SELECT a.*, e.title FROM attempt a JOIN enrollment n USING (exam_id,candidate_id)
-        JOIN exam e ON e.id=a.exam_id WHERE a.id=%s AND a.candidate_id=%s AND n.active
-        FOR UPDATE OF a FOR SHARE OF n
+        SELECT a.*, e.title FROM attempt a JOIN exam e ON e.id=a.exam_id
+        WHERE a.id=%s AND a.candidate_id=%s FOR UPDATE OF a
     """, (attempt_id, account_id)).fetchone()
     if not attempt:
         fail(404, "unavailable")
@@ -147,7 +152,7 @@ def finish(db, attempt, instant, score, submit=False):
         db.execute("UPDATE attempt SET finalized_at=%s, close_reason=%s WHERE id=%s",
                    (instant, attempt["close_reason"], attempt["id"]))
         event(db, attempt["id"], attempt["close_reason"], instant)
-    return {"attempt_id": attempt["id"], "finalized_at": attempt["finalized_at"],
+    return {"attempt_id": attempt["id"], "finalized_at": attempt["finalized_at"].astimezone(timezone.utc).isoformat(),
             "close_reason": attempt["close_reason"]}
 
 
@@ -172,9 +177,9 @@ def paper(db, account_id, attempt_id, score):
     receipt = finish(db, attempt, instant, score)
     return {"attempt_id": attempt_id, "exam_id": attempt["exam_id"], "title": attempt["title"],
             "server_time": instant, "deadline_at": attempt["deadline_at"],
-            "finalized_at": attempt["finalized_at"], "close_reason": attempt["close_reason"],
+            "finalized_at": receipt["finalized_at"] if receipt else None, "close_reason": attempt["close_reason"],
             "preferences": {k: account[k] for k in ("font_percent", "workspace_layout")},
-            "items": [] if receipt else read_items(db, attempt_id)}
+            "items": read_items(db, attempt_id)}
 
 
 def save(db, account_id, attempt_id, slot, edit, score):
@@ -198,7 +203,7 @@ def save(db, account_id, attempt_id, slot, edit, score):
     if edit.base_revision != item["revision"]:
         matches = (edit.written_answer == item["written_answer"] if written else
                    sorted(ids) == item["selected_option_ids"])
-        if matches and edit.flagged == item["flagged"]:
+        if edit.base_revision < item["revision"] and matches and edit.flagged == item["flagged"]:
             return 200, {"revision": item["revision"], "saved_at": item["saved_at"]}
         return 409, {"code": "stale_revision", "item": item}
     if not written:
