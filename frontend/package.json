@@ -3,7 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": {"dev": "vite", "build": "vite build", "preview": "vite preview"},
-  "dependencies": {"react": "^19.0.0", "react-dom": "^19.0.0"},
-  "devDependencies": {"vite": "^7.0.0"}
+  "scripts": {
+    "dev": "vite --config src/platform/vite.config.js",
+    "build": "vite build --config src/platform/vite.config.js && node src/platform/package-vercel.mjs",
+    "preview": "vite preview --config src/platform/vite.config.js"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
 }
